@@ -1,0 +1,6 @@
+zig-cache
+zig-out
+a.out
+tmp
+tmp.s
+test.c
