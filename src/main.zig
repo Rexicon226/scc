@@ -237,8 +237,17 @@ pub const Node = struct {
         var node: *Node = try new_num(stringToInt(source[tokens[i].start..tokens[i].end]));
         i += 1;
         while (i < tokens.len) : (i += 1) {
-            if (tokens[i].kind == .Number) {
-                node = try new_binary(.ND_ADD, node, try new_num(stringToInt(source[tokens[i].start..tokens[i].end])));
+            print("Token: {}\n", .{tokens[i]});
+
+            if (tokens[i].kind == .Mul) {
+                node = try new_binary(.ND_MUL, node, try new_num(stringToInt(source[tokens[i + 1].start..tokens[i + 1].end])));
+                i += 1;
+                continue;
+            }
+
+            if (tokens[i].kind == .Div) {
+                node = try new_binary(.ND_DIV, node, try new_num(stringToInt(source[tokens[i + 1].start..tokens[i + 1].end])));
+                i += 1;
                 continue;
             }
 
@@ -313,9 +322,9 @@ fn emit(node: *Node) void {
         return;
     }
 
-    emit(node.lhs);
-    push();
     emit(node.rhs);
+    push();
+    emit(node.lhs);
     pop("%rdi");
 
     switch (node.kind) {
@@ -327,9 +336,14 @@ fn emit(node: *Node) void {
             print("  sub %rdi, %rax\n", .{});
         },
 
-        .ND_MUL => {},
+        .ND_MUL => {
+            print("  imul %rdi, %rax\n", .{});
+        },
 
-        .ND_DIV => {},
+        .ND_DIV => {
+            print("  cqo\n", .{});
+            print("  idiv %rdi\n", .{});
+        },
 
         .ND_NUM => {
             @panic("uh oh");

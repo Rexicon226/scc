@@ -22,8 +22,9 @@ echo "assert"
 assert 0 0
 assert 20 20
 assert 25 '5+20'
-assert 41 ' 12 + 34 - 5 ' # Fails
-# assert 47 '5+6*7'
+assert 50 '5+20+25'
+assert 41 ' 12 + 34 - 5 '
+assert 47 '5+6*7'
 # assert 15 '5*(9-6)'
 # assert 4 '(3+5)/2'
 
