@@ -21,6 +21,11 @@ pub fn main() !void {
         return error.InvalidArguments;
     }
 
-    const source = args[1];
-    try CodeGen.parse(source);
+    const file = args[1];
+    // var source = try std.fs.cwd().openFile(file, .{});
+    // defer source.close();
+
+    // const data = try source.readToEndAlloc(allocator, 500);
+
+    try CodeGen.parse(file);
 }

@@ -32,8 +32,6 @@ pub fn parse(source: [:0]const u8) !void {
 
     const nodes = try parser.parse();
 
-    // print("Nodes: {any}\n", .{nodes});
-
     for (nodes) |node| {
         emit(node);
     }
@@ -57,6 +55,8 @@ fn pop(reg: []const u8) void {
 }
 
 fn gen_addr(node: *Node) void {
+    // print("node: {}\n", .{node});
+
     if (node.kind == .VAR) {
         const offset: i16 = @intCast((node.name - 'a' + 1) * 8);
         print("  lea {d}(%rbp), %rax\n", .{-offset});

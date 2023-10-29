@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
 
     const exe = b.addExecutable(.{
-        .name = "vanadium",
+        .name = "scc",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
     const run_cmd = b.addRunArtifact(exe);
+
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);

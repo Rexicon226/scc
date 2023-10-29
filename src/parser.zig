@@ -6,8 +6,11 @@ const Kind = TokenImport.Kind;
 
 pub var allocator: std.mem.Allocator = undefined;
 
-pub fn stringToInt(source: []const u8) !usize {
-    return try std.fmt.parseInt(usize, source, 10);
+pub fn stringToInt(source: []const u8) usize {
+    return std.fmt.parseInt(usize, source, 10) catch {
+        std.log.err("Failed to parse int: {s}\n", .{source});
+        @panic("failed to parse int");
+    };
 }
 
 pub const Parser = struct {
@@ -24,31 +27,229 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) ![]*Node {
-        // List of statement nodes.
         var statements = std.ArrayList(*Node).init(allocator);
 
-        var tokensEaten: usize = 0;
-        // -1 for the last SemiColon
-        while (tokensEaten < self.tokens.len - 1) {
-            self.index = 0;
-            const node = try Node.construct(
-                &self.index,
-                self.source,
-                self.tokens[tokensEaten..self.tokens.len],
-                null,
-            );
-
-            tokensEaten += self.index;
-
+        while (self.index < self.tokens.len) {
+            const node = self.assign(self.tokens[self.index]);
             try statements.append(node);
+
+            self.skip(.SemiColon);
         }
 
         return statements.items;
     }
+
+    pub fn assign(self: *Parser, token: Token) *Node {
+        var node = self.equality(token);
+
+        if (self.tokens[self.index].kind == .Assign) {
+            self.index += 1;
+            node = Node.new_binary(.ASSIGN, node, self.assign(self.tokens[self.index]));
+        }
+
+        return node;
+    }
+
+    pub fn equality(self: *Parser, token: Token) *Node {
+        var node = self.relational(token);
+
+        while (true) {
+            if (self.tokens[self.index].kind == .Eq) {
+                self.index += 1;
+                node = Node.new_binary(.EQ, node, self.relational(self.tokens[self.index]));
+                continue;
+            }
+
+            if (self.tokens[self.index].kind == .Ne) {
+                self.index += 1;
+                node = Node.new_binary(.NE, node, self.relational(self.tokens[self.index]));
+                continue;
+            }
+
+            return node;
+        }
+    }
+
+    pub fn relational(self: *Parser, token: Token) *Node {
+        var node = self.add(token);
+
+        while (true) {
+            if (self.tokens[self.index].kind == .Lt) {
+                self.index += 1;
+                node = Node.new_binary(.LT, node, self.add(self.tokens[self.index]));
+                continue;
+            }
+
+            if (self.tokens[self.index].kind == .Le) {
+                self.index += 1;
+                node = Node.new_binary(.LE, node, self.add(self.tokens[self.index]));
+                continue;
+            }
+
+            if (self.tokens[self.index].kind == .Gt) {
+                self.index += 1;
+                node = Node.new_binary(.GT, node, self.add(self.tokens[self.index]));
+                continue;
+            }
+
+            if (self.tokens[self.index].kind == .Ge) {
+                self.index += 1;
+                node = Node.new_binary(.GE, node, self.add(self.tokens[self.index]));
+                continue;
+            }
+
+            return node;
+        }
+    }
+
+    pub fn add(self: *Parser, token: Token) *Node {
+        var node = self.mul(token);
+
+        while (true) {
+            if (self.tokens[self.index].kind == .Plus) {
+                self.index += 1;
+                node = Node.new_binary(.ADD, node, self.mul(self.tokens[self.index]));
+                continue;
+            }
+
+            if (self.tokens[self.index].kind == .Minus) {
+                self.index += 1;
+                node = Node.new_binary(.SUB, node, self.mul(self.tokens[self.index]));
+                continue;
+            }
+
+            return node;
+        }
+
+        @panic("uh oh");
+    }
+
+    pub fn mul(self: *Parser, token: Token) *Node {
+        var node = self.unary(token);
+
+        while (true) {
+            if (self.tokens[self.index].kind == .Mul) {
+                self.index += 1;
+                node = Node.new_binary(.MUL, node, self.unary(self.tokens[self.index]));
+                continue;
+            }
+
+            if (self.tokens[self.index].kind == .Div) {
+                self.index += 1;
+                node = Node.new_binary(.DIV, node, self.unary(self.tokens[self.index]));
+                continue;
+            }
+
+            return node;
+        }
+
+        @panic("uh oh");
+    }
+
+    pub fn unary(self: *Parser, token: Token) *Node {
+        if (token.kind == .Plus) {
+            self.index += 1;
+            return self.primary(self.tokens[self.index]);
+        }
+
+        if (token.kind == .Minus) {
+            self.index += 1;
+            return Node.new_unary(.NEG, self.unary(self.tokens[self.index]));
+        }
+
+        return self.primary(token);
+    }
+
+    pub fn primary(self: *Parser, token: Token) *Node {
+        if (token.kind == .LeftParen) {
+            self.index += 1;
+            const node = self.add(self.tokens[self.index]);
+            self.skip(.RightParen);
+            return node;
+        }
+
+        if (token.kind == .Variable) {
+            const node = Node.new_variable(self.source[token.start..token.end][0]);
+            self.index += 1;
+            return node;
+        }
+
+        if (token.kind == .Number) {
+            const node = Node.new_num(stringToInt(self.source[token.start..token.end]));
+            self.index += 1;
+            return node;
+        }
+
+        std.log.err("Found: {}", .{token.kind});
+        @panic("wrong usage of primary");
+    }
+
+    pub fn skip(self: *Parser, op: TokenImport.Kind) void {
+        if (self.tokens[self.index].kind != op) {
+            std.log.err("Found: {}", .{self.tokens[self.index].kind});
+            @panic("SKIP: found wrong operator");
+        }
+        self.index += 1;
+    }
 };
 
-pub const AstTree = struct {
-    root: *Node,
+pub const Node = struct {
+    kind: NodeKind,
+    ast: Ast,
+
+    value: usize,
+    name: u8,
+
+    pub fn new_node(kind: NodeKind) *Node {
+        const node = allocator.create(Node) catch {
+            @panic("failed to allocate node");
+        };
+        node.kind = kind;
+
+        node.ast = .invalid;
+
+        return node;
+    }
+
+    pub fn new_num(num: usize) *Node {
+        const node = new_node(.NUM);
+        node.value = num;
+
+        node.ast = .invalid;
+
+        return node;
+    }
+
+    pub fn new_binary(kind: NodeKind, lhs: *Node, rhs: *Node) *Node {
+        const node = new_node(kind);
+
+        node.ast = Ast.new(.binary, .{
+            .lhs = lhs,
+            .rhs = rhs,
+        });
+
+        return node;
+    }
+
+    pub fn new_unary(kind: NodeKind, lhs: *Node) *Node {
+        const node = new_node(kind);
+
+        node.ast = Ast.new(.binary, .{
+            .lhs = lhs,
+            .rhs = undefined,
+        });
+
+        return node;
+    }
+
+    pub fn new_variable(name: u8) *Node {
+        const node = new_node(.VAR);
+        node.name = name;
+
+        node.ast = .invalid;
+
+        return node;
+    }
 };
 
 pub const NodeKind = enum {
@@ -109,440 +310,3 @@ pub const Ast = union(enum) {
         return @unionInit(@This(), @tagName(k), init);
     }
 };
-
-pub const Node = struct {
-    kind: NodeKind,
-
-    ast: Ast,
-
-    value: usize,
-    name: u8,
-
-    pub fn new_node(kind: NodeKind) !*Node {
-        const node = try allocator.create(Node);
-        node.kind = kind;
-        return node;
-    }
-
-    pub fn new_statement(current: *Node, lhs: *Node) !*Node {
-        const empty = try allocator.create(Node);
-
-        current.ast = Ast.new(.binary, .{
-            .lhs = lhs,
-            .rhs = empty, // To be the next statement.
-        });
-
-        return current;
-    }
-
-    pub fn new_binary(kind: NodeKind, lhs: *Node, rhs: *Node) !*Node {
-        const node = try allocator.create(Node);
-        node.kind = kind;
-
-        node.ast = Ast.new(.binary, .{
-            .lhs = lhs,
-            .rhs = rhs,
-        });
-
-        return node;
-    }
-
-    pub fn new_num(value: usize) !*Node {
-        const node = try allocator.create(Node);
-        node.kind = .NUM;
-        node.value = value;
-
-        node.ast = .invalid;
-
-        return node;
-    }
-
-    pub fn new_negative(rhs: *Node) !*Node {
-        if (rhs.kind != .NUM) {
-            @panic("expected number");
-        }
-
-        const node = try allocator.create(Node);
-        const empty = try allocator.create(Node);
-        empty.kind = .INVALID;
-        node.kind = .NEG;
-
-        node.ast = Ast.new(.binary, .{
-            .lhs = empty,
-            .rhs = rhs,
-        });
-
-        return node;
-    }
-
-    pub fn new_variable(name: u8) !*Node {
-        const node = try allocator.create(Node);
-        node.kind = .VAR;
-        node.name = name; // Needed to prevent garbage memory.
-
-        const empty = try allocator.create(Node);
-
-        node.ast = Ast.new(.binary, .{
-            .lhs = empty,
-            .rhs = empty,
-        });
-
-        return node;
-    }
-
-    pub fn new_assign(variable: *Node) !*Node {
-        const node = try allocator.create(Node);
-        node.kind = .ASSIGN;
-
-        const empty = try allocator.create(Node);
-
-        node.ast = Ast.new(.binary, .{
-            .lhs = variable,
-            .rhs = empty,
-        });
-
-        return node;
-    }
-
-    // Used for 'double negative'.
-    // RHS is expected to be filled later.
-    pub fn empty_negative() !*Node {
-        const node = try allocator.create(Node);
-        const empty = try allocator.create(Node);
-        node.kind = .NEG;
-
-        node.ast = Ast.new(.binary, .{
-            .lhs = empty,
-            .rhs = empty,
-        });
-
-        return node;
-    }
-
-    pub const ConstructOptions = struct {
-        requireSemiColon: bool = true,
-    };
-
-    pub fn construct(
-        index_: *usize,
-        source: [:0]const u8,
-        tokens: []Token,
-        options_: ?ConstructOptions,
-    ) !*Node {
-        var options = ConstructOptions{};
-        if (options_) |op| {
-            options = op;
-        }
-
-        var index = index_.*;
-        if (tokens.len == 0) {
-            @panic("empty tokens");
-        }
-
-        // Check for a single number
-        if (tokens.len == 1) {
-            if (options.requireSemiColon) {
-                @panic("no semicolon found");
-            }
-        }
-
-        var operand_stack = std.ArrayList(*Node).init(allocator);
-        var operator_stack = std.ArrayList(Kind).init(allocator);
-
-        var i: usize = 0;
-
-        while (index < tokens.len) : (index += 1) {
-            const token = tokens[index];
-            // std.debug.print("Token: {}\n", .{token});
-
-            // If a SemiColon is found, the expression is over
-            // Wrap everything up, and return it.
-            if (token.kind == .SemiColon) {
-                while (operand_stack.items.len > 1 and operator_stack.items.len > 0) {
-                    const op = operator_stack.pop();
-                    const rhs = operand_stack.pop();
-                    const lhs = operand_stack.pop();
-
-                    const node = try new_binary(tok2node(op), lhs, rhs);
-                    try operand_stack.append(node);
-                }
-
-                index_.* = index + 1;
-
-                const node = operand_stack.pop();
-                return node;
-            }
-
-            if (token.kind == .Variable) {
-                var name = source[token.start..token.end][0];
-                const node = try new_variable(name);
-                try operand_stack.append(node);
-                continue;
-            }
-
-            if (token.kind == .Assign) {
-                // var | assign | rhs
-                if (tokens[index - 1].kind == .Variable) {
-                    const node = try new_assign(operand_stack.pop());
-
-                    // Parse the rhs
-                    const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
-
-                    node.ast.binary.rhs = rhs;
-
-                    try operand_stack.append(node);
-
-                    index += 1;
-                    continue;
-                }
-
-                // not var | assign
-                @panic("no variable to assign");
-            }
-
-            if (token.kind == .Number) {
-                const value = try stringToInt(source[token.start..token.end]);
-                const node = try new_num(value);
-                try operand_stack.append(node);
-
-                continue;
-            }
-            if (token.kind == .LeftParen) {
-                i = 0;
-
-                // Go until we find the matching right paren
-                while (i < tokens.len) {
-                    if (tokens[index + i].kind == .RightParen) {
-                        break;
-                    }
-
-                    if (i == tokens.len) {
-                        @panic("unmatched paren");
-                    }
-
-                    i += 1;
-                }
-
-                const sliceToParse = tokens[index + 1 .. index + i];
-
-                // Artificially add a semicolon to the end of the slice
-
-                const node = try Node.construct(index_, source, sliceToParse, .{
-                    .requireSemiColon = false,
-                });
-
-                try operand_stack.append(node);
-                index += i;
-                continue;
-            }
-
-            if (token.kind == .Plus or token.kind == .Minus) {
-                // Plus
-                if (token.kind == .Plus) {
-                    // If the token before the plus is a operator, this can be ignored
-                    if (index > 0 and !(tokens[index - 1].kind == .Number or tokens[index - 1].kind == .Variable)) {
-                        index += 1;
-                        continue;
-                    }
-
-                    // If the token before the plus is a number, this is an addition
-                    while (operator_stack.items.len > 1 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
-                        const op = operator_stack.pop();
-
-                        const rhs = operand_stack.pop();
-                        const lhs = operand_stack.pop();
-                        const node = try Node.new_binary(tok2node(op), lhs, rhs);
-                        try operand_stack.append(node);
-                    }
-                    try operator_stack.append(token.kind);
-                }
-
-                // Check if there is a number or a variable before the minus, this is a subtraction
-                if (index > 0 and (tokens[index - 1].kind == .Number or tokens[index - 1].kind == .Variable)) {
-                    while (operator_stack.items.len > 0 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
-                        const op = operator_stack.pop();
-
-                        const rhs = operand_stack.pop();
-                        const lhs = operand_stack.pop();
-                        const node = try Node.new_binary(tok2node(op), lhs, rhs);
-                        try operand_stack.append(node);
-                    }
-                    try operator_stack.append(token.kind);
-                    continue;
-                }
-
-                if (token.kind == .Minus) {
-                    const value = stringToInt(source[tokens[index + 1].start..tokens[index + 1].end]) catch {
-                        // Check if an empty negative is on the stack
-                        if (!(operand_stack.items.len > 0 and operand_stack.items[operand_stack.items.len - 1].kind == .NEG)) {
-                            const node = try empty_negative();
-                            try operand_stack.append(node);
-                            continue;
-                        }
-
-                        // Now there is a empty negative on the stack.
-                        // There can be up to 3 "signs" in a row, before the value.
-                        // Then it's a panic.
-
-                        // Check if the next token is a + or -
-                        if (tokens[index + 1].kind == .Plus or tokens[index + 1].kind == .Minus) {
-                            // Check if the next token is a number
-                            if (tokens[index + 2].kind == .Number) {
-                                const value = stringToInt(source[tokens[index + 2].start..tokens[index + 2].end]) catch {
-                                    @panic("invalid expression");
-                                };
-
-                                const node = try new_negative(try new_num(value));
-
-                                // Check if there already is a empty negative on the stack
-                                if (operand_stack.items.len > 0 and operand_stack.items[operand_stack.items.len - 1].kind == .NEG) {
-                                    const lhs = operand_stack.pop();
-                                    lhs.ast.binary.rhs = node;
-                                    try operand_stack.append(lhs);
-                                    index += 2;
-                                    continue;
-                                }
-
-                                try operand_stack.append(node);
-                                index += 3;
-                                continue;
-                            }
-                        }
-
-                        // std.debug.print("Token: {}\n", .{tokens[index]});
-                        @panic("invalid expression");
-                    };
-
-                    const node = try new_negative(try new_num(value));
-
-                    // Check if there already is a empty negative on the stack
-                    if (operand_stack.items.len > 0 and operand_stack.items[operand_stack.items.len - 1].kind == .NEG) {
-                        const lhs = operand_stack.pop();
-                        lhs.ast.binary.rhs = node;
-                        try operand_stack.append(lhs);
-                        index += 1;
-                        continue;
-                    }
-
-                    try operand_stack.append(node);
-                    index += 1;
-                    continue;
-                }
-                continue;
-            }
-
-            if (token.kind == .Mul or token.kind == .Div) {
-                while (operator_stack.items.len > 0 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
-                    const op = operator_stack.pop();
-
-                    const rhs = operand_stack.pop();
-                    const lhs = operand_stack.pop();
-                    const node = try Node.new_binary(tok2node(op), lhs, rhs);
-                    try operand_stack.append(node);
-                }
-                try operator_stack.append(token.kind);
-                continue;
-            }
-
-            if (token.kind == .Eq) {
-                // Get both sides
-                const lhs = operand_stack.pop();
-
-                // Construct the rhs node
-                const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
-
-                const node = try Node.new_binary(.EQ, lhs, rhs);
-                try operand_stack.append(node);
-                index += 1;
-                continue;
-            } else if (token.kind == .Ne) {
-                // Get both sides
-                const lhs = operand_stack.pop();
-
-                // Construct the rhs node
-                const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
-
-                const node = try Node.new_binary(.NE, lhs, rhs);
-                try operand_stack.append(node);
-                index += 1;
-                continue;
-            } else if (token.kind == .Lt) {
-                // Get both sides
-                const lhs = operand_stack.pop();
-
-                // Construct the rhs node
-                const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
-
-                const node = try Node.new_binary(.LT, lhs, rhs);
-                try operand_stack.append(node);
-                index += 1;
-                continue;
-            } else if (token.kind == .Le) {
-                // Get both sides
-                const lhs = operand_stack.pop();
-
-                // Construct the rhs node
-                const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
-
-                const node = try Node.new_binary(.LE, lhs, rhs);
-                try operand_stack.append(node);
-                index += 1;
-                continue;
-            } else if (token.kind == .Gt) {
-                // Get both sides
-                const lhs = operand_stack.pop();
-
-                // Construct the rhs node
-                const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
-
-                const node = try Node.new_binary(.GT, lhs, rhs);
-                try operand_stack.append(node);
-                index += 1;
-                continue;
-            } else if (token.kind == .Ge) {
-                // Get both sides
-                const lhs = operand_stack.pop();
-
-                // Construct the rhs node
-                const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
-
-                const node = try Node.new_binary(.GE, lhs, rhs);
-                try operand_stack.append(node);
-                index += 1;
-                continue;
-            } else {
-                @panic("invalid token");
-            }
-        }
-
-        if (options.requireSemiColon) {
-            @panic("no semicolon found");
-        } else {
-            while (operand_stack.items.len > 1 and operator_stack.items.len > 0) {
-                const op = operator_stack.pop();
-                const rhs = operand_stack.pop();
-                const lhs = operand_stack.pop();
-
-                const node = try new_binary(tok2node(op), lhs, rhs);
-                try operand_stack.append(node);
-            }
-
-            index_.* = index + 1;
-
-            const node = operand_stack.pop();
-            return node;
-        }
-    }
-};
-
-fn hasHigherPrecedence(op1: Kind, op2: Kind) bool {
-    return precedence(op1) > precedence(op2);
-}
-
-fn precedence(kind: Kind) u8 {
-    switch (kind) {
-        .Plus, .Minus => return 1,
-        .Mul, .Div => return 2,
-        else => @panic("invalid token"),
-    }
-}
