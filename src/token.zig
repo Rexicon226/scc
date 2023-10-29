@@ -11,10 +11,12 @@ pub const Kind = enum {
 
     // Literals
     Number,
+    Variable,
 
     // Punctuation
     LeftParen, // (
     RightParen, // )
+    Assign, // =
 
     // Compare
     Eq, // ==
@@ -71,11 +73,13 @@ pub const Tokenizer = struct {
         while (self.index < buffer.len) {
             const c = buffer[self.index];
 
+            // Space
             if (c == ' ') {
                 self.index += 1;
                 continue;
             }
 
+            // Number
             if (std.ascii.isDigit(c)) {
                 const start = self.index;
                 while (std.ascii.isDigit(buffer[self.index])) {
@@ -89,6 +93,28 @@ pub const Tokenizer = struct {
                 try self.tokens.append(
                     try Token.new_token(
                         .Number,
+                        start,
+                        self.index,
+                    ),
+                );
+
+                continue;
+            }
+
+            // Variable
+            if (std.ascii.isAlphabetic(c)) {
+                const start = self.index;
+                while (std.ascii.isAlphabetic(buffer[self.index])) {
+                    self.index += 1;
+
+                    if (self.index - start > MAX_TOKENS) {
+                        @panic("token too long");
+                    }
+                }
+
+                try self.tokens.append(
+                    try Token.new_token(
+                        .Variable,
                         start,
                         self.index,
                     ),
@@ -201,6 +227,17 @@ pub const Tokenizer = struct {
                     self.index += 2;
                     continue;
                 }
+
+                try self.tokens.append(
+                    try Token.new_token(
+                        .Assign,
+                        self.index,
+                        self.index + 1,
+                    ),
+                );
+
+                self.index += 1;
+                continue;
             }
 
             if (c == '>') {

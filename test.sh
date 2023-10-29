@@ -20,6 +20,15 @@ zig build
 
 echo "assert"
 
+assert 3 'a=3; a;'
+assert 8 'a=3; z=5; a+z;'
+assert 40 'b=4; y=10; b*y;'
+assert 32 'c=128; u=4; c/u;'
+assert 30 'a=10; b=10; c=10; a+b+c;'
+
+
+# assert 6 'a=b=3; a+b;'
+
 assert 0 '0;'
 assert 42 '42;'
 assert 21 '5+20-4;'

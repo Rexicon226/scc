@@ -37,6 +37,7 @@ pub const Parser = struct {
                 self.tokens[tokensEaten..self.tokens.len],
                 null,
             );
+
             tokensEaten += self.index;
 
             try statements.append(node);
@@ -59,6 +60,8 @@ pub const NodeKind = enum {
 
     // Literals
     NUM,
+    VAR,
+    ASSIGN,
 
     NEG,
 
@@ -113,6 +116,7 @@ pub const Node = struct {
     ast: Ast,
 
     value: usize,
+    name: u8,
 
     pub fn new_node(kind: NodeKind) !*Node {
         const node = try allocator.create(Node);
@@ -171,6 +175,35 @@ pub const Node = struct {
         return node;
     }
 
+    pub fn new_variable(name: u8) !*Node {
+        const node = try allocator.create(Node);
+        node.kind = .VAR;
+        node.name = name; // Needed to prevent garbage memory.
+
+        const empty = try allocator.create(Node);
+
+        node.ast = Ast.new(.binary, .{
+            .lhs = empty,
+            .rhs = empty,
+        });
+
+        return node;
+    }
+
+    pub fn new_assign(variable: *Node) !*Node {
+        const node = try allocator.create(Node);
+        node.kind = .ASSIGN;
+
+        const empty = try allocator.create(Node);
+
+        node.ast = Ast.new(.binary, .{
+            .lhs = variable,
+            .rhs = empty,
+        });
+
+        return node;
+    }
+
     // Used for 'double negative'.
     // RHS is expected to be filled later.
     pub fn empty_negative() !*Node {
@@ -220,6 +253,8 @@ pub const Node = struct {
 
         while (index < tokens.len) : (index += 1) {
             const token = tokens[index];
+            // std.debug.print("Token: {}\n", .{token});
+
             // If a SemiColon is found, the expression is over
             // Wrap everything up, and return it.
             if (token.kind == .SemiColon) {
@@ -238,11 +273,41 @@ pub const Node = struct {
                 return node;
             }
 
+            if (token.kind == .Variable) {
+                var name = source[token.start..token.end][0];
+                const node = try new_variable(name);
+                try operand_stack.append(node);
+                continue;
+            }
+
+            if (token.kind == .Assign) {
+                // var | assign | rhs
+                if (tokens[index - 1].kind == .Variable) {
+                    const node = try new_assign(operand_stack.pop());
+
+                    // Parse the rhs
+                    const rhs = try Node.construct(index_, source, tokens[index + 1 .. tokens.len], null);
+
+                    node.ast.binary.rhs = rhs;
+
+                    try operand_stack.append(node);
+
+                    index += 1;
+                    continue;
+                }
+
+                // not var | assign
+                @panic("no variable to assign");
+            }
+
             if (token.kind == .Number) {
                 const value = try stringToInt(source[token.start..token.end]);
-                const node = try Node.new_num(value);
+                const node = try new_num(value);
                 try operand_stack.append(node);
-            } else if (token.kind == .LeftParen) {
+
+                continue;
+            }
+            if (token.kind == .LeftParen) {
                 i = 0;
 
                 // Go until we find the matching right paren
@@ -268,13 +333,14 @@ pub const Node = struct {
 
                 try operand_stack.append(node);
                 index += i;
-            } else if (token.kind == .Plus or token.kind == .Minus) {
+                continue;
+            }
 
+            if (token.kind == .Plus or token.kind == .Minus) {
                 // Plus
                 if (token.kind == .Plus) {
-                    // If the token befoer the plus is a operator, this can be ignored
-                    if (index > 0 and tokens[index - 1].kind != .Number) {
-                        // try operator_stack.append(token.kind);
+                    // If the token before the plus is a operator, this can be ignored
+                    if (index > 0 and !(tokens[index - 1].kind == .Number or tokens[index - 1].kind == .Variable)) {
                         index += 1;
                         continue;
                     }
@@ -291,10 +357,8 @@ pub const Node = struct {
                     try operator_stack.append(token.kind);
                 }
 
-                // Print the token
-
-                // Check if there is a number before the minus, this is a subtraction
-                if (index > 0 and tokens[index - 1].kind == .Number) {
+                // Check if there is a number or a variable before the minus, this is a subtraction
+                if (index > 0 and (tokens[index - 1].kind == .Number or tokens[index - 1].kind == .Variable)) {
                     while (operator_stack.items.len > 0 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
                         const op = operator_stack.pop();
 
@@ -345,7 +409,7 @@ pub const Node = struct {
                             }
                         }
 
-                        std.debug.print("Token: {}\n", .{tokens[index]});
+                        // std.debug.print("Token: {}\n", .{tokens[index]});
                         @panic("invalid expression");
                     };
 
@@ -364,7 +428,10 @@ pub const Node = struct {
                     index += 1;
                     continue;
                 }
-            } else if (token.kind == .Mul or token.kind == .Div) {
+                continue;
+            }
+
+            if (token.kind == .Mul or token.kind == .Div) {
                 while (operator_stack.items.len > 0 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
                     const op = operator_stack.pop();
 
@@ -374,7 +441,10 @@ pub const Node = struct {
                     try operand_stack.append(node);
                 }
                 try operator_stack.append(token.kind);
-            } else if (token.kind == .Eq) {
+                continue;
+            }
+
+            if (token.kind == .Eq) {
                 // Get both sides
                 const lhs = operand_stack.pop();
 
