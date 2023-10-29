@@ -26,6 +26,14 @@ pub const Kind = enum {
     // Punctuation
     LeftParen,
     RightParen,
+
+    // Compare
+    Eq, // ==
+    Ne, // !=
+    Lt, // <
+    Le, // <=
+    Gt, // >
+    Ge, // >=
 };
 
 pub const Token = struct {
@@ -172,6 +180,94 @@ pub const Tokenizer = struct {
                 self.index += 1;
                 continue;
             }
+
+            if (c == '=') {
+                if (self.index + 1 < buffer.len and buffer[self.index + 1] == '=') {
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .Eq,
+                            self.index,
+                            self.index + 2,
+                        ),
+                    );
+
+                    self.index += 2;
+                    continue;
+                }
+            }
+
+            if (c == '>') {
+                if (self.index + 1 < buffer.len) {
+                    if (buffer[self.index + 1] == '=') {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .Ge,
+                                self.index,
+                                self.index + 2,
+                            ),
+                        );
+
+                        self.index += 2;
+                        continue;
+                    }
+
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .Gt,
+                            self.index,
+                            self.index + 1,
+                        ),
+                    );
+
+                    self.index += 1;
+                    continue;
+                }
+            }
+
+            if (c == '<') {
+                if (self.index + 1 < buffer.len) {
+                    if (buffer[self.index + 1] == '=') {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .Le,
+                                self.index,
+                                self.index + 2,
+                            ),
+                        );
+
+                        self.index += 2;
+                        continue;
+                    }
+
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .Lt,
+                            self.index,
+                            self.index + 1,
+                        ),
+                    );
+
+                    self.index += 1;
+                    continue;
+                }
+            }
+
+            if (c == '!') {
+                if (self.index + 1 < buffer.len and buffer[self.index + 1] == '=') {
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .Ne,
+                            self.index,
+                            self.index + 2,
+                        ),
+                    );
+
+                    self.index += 2;
+                    continue;
+                }
+            }
+
+            @panic("invalid character");
         }
     }
 };
@@ -181,15 +277,26 @@ pub const AstTree = struct {
 };
 
 pub const NodeKind = enum {
+    // Operators
     ADD,
     SUB,
     MUL,
     DIV,
 
+    // Literals
     NUM,
 
     NEG,
 
+    // Equality
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE,
+
+    // Extra
     INVALID,
 };
 
@@ -451,6 +558,74 @@ pub const Node = struct {
                     try operand_stack.append(node);
                 }
                 try operator_stack.append(token.kind);
+            } else if (token.kind == .Eq) {
+                // Get both sides
+                const lhs = operand_stack.pop();
+
+                // Construct the rhs node
+                const rhs = try Node.construct(source, tokens[index + 1 .. tokens.len]);
+
+                const node = try Node.new_binary(.EQ, lhs, rhs);
+                try operand_stack.append(node);
+                index += 1;
+                continue;
+            } else if (token.kind == .Ne) {
+                // Get both sides
+                const lhs = operand_stack.pop();
+
+                // Construct the rhs node
+                const rhs = try Node.construct(source, tokens[index + 1 .. tokens.len]);
+
+                const node = try Node.new_binary(.NE, lhs, rhs);
+                try operand_stack.append(node);
+                index += 1;
+                continue;
+            } else if (token.kind == .Lt) {
+                // Get both sides
+                const lhs = operand_stack.pop();
+
+                // Construct the rhs node
+                const rhs = try Node.construct(source, tokens[index + 1 .. tokens.len]);
+
+                const node = try Node.new_binary(.LT, lhs, rhs);
+                try operand_stack.append(node);
+                index += 1;
+                continue;
+            } else if (token.kind == .Le) {
+                // Get both sides
+                const lhs = operand_stack.pop();
+
+                // Construct the rhs node
+                const rhs = try Node.construct(source, tokens[index + 1 .. tokens.len]);
+
+                const node = try Node.new_binary(.LE, lhs, rhs);
+                try operand_stack.append(node);
+                index += 1;
+                continue;
+            } else if (token.kind == .Gt) {
+                // Get both sides
+                const lhs = operand_stack.pop();
+
+                // Construct the rhs node
+                const rhs = try Node.construct(source, tokens[index + 1 .. tokens.len]);
+
+                const node = try Node.new_binary(.GT, lhs, rhs);
+                try operand_stack.append(node);
+                index += 1;
+                continue;
+            } else if (token.kind == .Ge) {
+                // Get both sides
+                const lhs = operand_stack.pop();
+
+                // Construct the rhs node
+                const rhs = try Node.construct(source, tokens[index + 1 .. tokens.len]);
+
+                const node = try Node.new_binary(.GE, lhs, rhs);
+                try operand_stack.append(node);
+                index += 1;
+                continue;
+            } else {
+                @panic("invalid token");
             }
         }
 
@@ -505,7 +680,6 @@ pub fn main() !void {
     }
 
     const source = args[1];
-
     try parse(source);
 }
 
@@ -519,9 +693,9 @@ fn parse(source: [:0]const u8) !void {
     try tokenizer.generate();
 
     const tokens = try tokenizer.tokens.toOwnedSlice();
+    // print("Tokens: {any}\n", .{tokens});
 
     const node = try Node.construct(source, tokens);
-
     emit(node);
 
     print("  ret\n", .{});
@@ -529,6 +703,8 @@ fn parse(source: [:0]const u8) !void {
 }
 
 fn emit(node: *Node) void {
+    // print("Node: {}\n", .{node});
+
     if (node.kind == .INVALID) {
         return;
     }
@@ -582,6 +758,26 @@ fn emit(node: *Node) void {
 
         .NEG => {
             print("  neg %rax\n", .{});
+        },
+
+        .EQ, .NE, .LT, .LE, .GT, .GE => {
+            print("  cmp %rdi, %rax\n", .{});
+
+            if (node.kind == .EQ) {
+                print("  sete %al\n", .{});
+            } else if (node.kind == .NE) {
+                print("  setne %al\n", .{});
+            } else if (node.kind == .LT) {
+                print("  setl %al\n", .{});
+            } else if (node.kind == .LE) {
+                print("  setle %al\n", .{});
+            } else if (node.kind == .GT) {
+                print("  setg %al\n", .{});
+            } else if (node.kind == .GE) {
+                print("  setge %al\n", .{});
+            }
+
+            print("  movzb %al, %rax\n", .{});
         },
 
         else => {
