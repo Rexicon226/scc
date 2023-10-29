@@ -177,18 +177,51 @@ pub const AstTree = struct {
 };
 
 pub const NodeKind = enum {
-    ND_ADD,
-    ND_SUB,
-    ND_MUL,
-    ND_DIV,
-    ND_NUM,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    NUM,
+    ROOT, // Only used for the root node
+    INVALID, // For empty AST nodes
+};
+
+fn tok2node(kind: Kind) NodeKind {
+    switch (kind) {
+        .Plus => return .ADD,
+        .Minus => return .SUB,
+        .Mul => return .MUL,
+        .Div => return .DIV,
+        else => @panic("invalid token"),
+    }
+}
+
+fn node2tok(kind: NodeKind) Kind {
+    switch (kind) {
+        .ADD => return .Plus,
+        .SUB => return .Minus,
+        .MUL => return .Mul,
+        .DIV => return .Div,
+        else => @panic("invalid node"),
+    }
+}
+
+pub const Ast = union(enum) {
+    binary: struct {
+        lhs: *Node,
+        rhs: *Node,
+    },
+    invalid,
+
+    pub inline fn new(comptime k: std.meta.Tag(@This()), init: anytype) @This() {
+        return @unionInit(@This(), @tagName(k), init);
+    }
 };
 
 pub const Node = struct {
     kind: NodeKind,
 
-    lhs: *Node,
-    rhs: *Node,
+    ast: Ast,
 
     value: usize,
 
@@ -201,16 +234,21 @@ pub const Node = struct {
     pub fn new_binary(kind: NodeKind, lhs: *Node, rhs: *Node) !*Node {
         const node = try allocator.create(Node);
         node.kind = kind;
-        node.lhs = lhs;
-        node.rhs = rhs;
+
+        node.ast = Ast.new(.binary, .{
+            .lhs = lhs,
+            .rhs = rhs,
+        });
 
         return node;
     }
 
     pub fn new_num(value: usize) !*Node {
         const node = try allocator.create(Node);
-        node.kind = .ND_NUM;
+        node.kind = .NUM;
         node.value = value;
+
+        node.ast = .invalid;
 
         return node;
     }
@@ -220,7 +258,7 @@ pub const Node = struct {
             @panic("empty tokens");
         }
 
-        // Check for a number
+        // Check for a single number
         if (tokens.len == 1) {
             const token = tokens[0];
 
@@ -233,40 +271,80 @@ pub const Node = struct {
             return try Node.new_num(value);
         }
 
+        var operand_stack = std.ArrayList(*Node).init(allocator);
+        var operator_stack = std.ArrayList(Kind).init(allocator);
+
         var i: usize = 0;
-        var node: *Node = try new_num(stringToInt(source[tokens[i].start..tokens[i].end]));
-        i += 1;
-        while (i < tokens.len) : (i += 1) {
-            print("Token: {}\n", .{tokens[i]});
+        var index: usize = 0;
 
-            if (tokens[i].kind == .Mul) {
-                node = try new_binary(.ND_MUL, node, try new_num(stringToInt(source[tokens[i + 1].start..tokens[i + 1].end])));
-                i += 1;
-                continue;
+        while (index < tokens.len) : (index += 1) {
+            const token = tokens[index];
+
+            if (token.kind == .Number) {
+                const value = stringToInt(source[token.start..token.end]);
+                const node = try Node.new_num(value);
+                try operand_stack.append(node);
+            } else if (token.kind == .LeftParen) {
+                i = 0;
+
+                // Go until we find the matching right paren
+                while (i < tokens.len) {
+                    if (tokens[index + i].kind == .RightParen) {
+                        break;
+                    }
+
+                    if (i == tokens.len) {
+                        @panic("unmatched paren");
+                    }
+
+                    i += 1;
+                }
+
+                const sliceToParse = tokens[index + 1 .. index + i];
+                const node = try Node.construct(source, sliceToParse);
+
+                try operand_stack.append(node);
+                index += i;
             }
+            // something
+            else if (token.kind == .Plus or token.kind == .Minus or token.kind == .Mul or token.kind == .Div) {
+                while (operator_stack.items.len > 1 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
+                    const op = operator_stack.pop();
 
-            if (tokens[i].kind == .Div) {
-                node = try new_binary(.ND_DIV, node, try new_num(stringToInt(source[tokens[i + 1].start..tokens[i + 1].end])));
-                i += 1;
-                continue;
-            }
-
-            if (tokens[i].kind == .Plus) {
-                node = try new_binary(.ND_ADD, node, try new_num(stringToInt(source[tokens[i + 1].start..tokens[i + 1].end])));
-                i += 1;
-                continue;
-            }
-
-            if (tokens[i].kind == .Minus) {
-                node = try new_binary(.ND_SUB, node, try new_num(stringToInt(source[tokens[i + 1].start..tokens[i + 1].end])));
-                i += 1;
-                continue;
+                    const rhs = operand_stack.pop();
+                    const lhs = operand_stack.pop();
+                    const node = try Node.new_binary(tok2node(op), lhs, rhs);
+                    try operand_stack.append(node);
+                }
+                try operator_stack.append(token.kind);
             }
         }
 
+        while (operand_stack.items.len > 1) {
+            const op = operator_stack.pop();
+            const rhs = operand_stack.pop();
+            const lhs = operand_stack.pop();
+
+            const node = try new_binary(tok2node(op), lhs, rhs);
+            try operand_stack.append(node);
+        }
+
+        const node = operand_stack.pop();
         return node;
     }
 };
+
+fn hasHigherPrecedence(op1: Kind, op2: Kind) bool {
+    return precedence(op1) > precedence(op2);
+}
+
+fn precedence(kind: Kind) u8 {
+    switch (kind) {
+        .Plus, .Minus => return 1,
+        .Mul, .Div => return 2,
+        else => @panic("invalid token"),
+    }
+}
 
 // Code Generation
 
@@ -317,35 +395,49 @@ fn parse(source: [:0]const u8) !void {
 }
 
 fn emit(node: *Node) void {
-    if (node.kind == .ND_NUM) {
+    if (node.kind == .NUM) {
         print("  mov ${d}, %rax\n", .{node.value});
         return;
     }
 
-    emit(node.rhs);
+    switch (node.ast) {
+        .binary => {
+            emit(node.ast.binary.rhs);
+        },
+        .invalid => {},
+    }
+
     push();
-    emit(node.lhs);
+    // emit(node.ast.binary.lhs);
+
+    switch (node.ast) {
+        .binary => {
+            emit(node.ast.binary.lhs);
+        },
+        .invalid => {},
+    }
+
     pop("%rdi");
 
     switch (node.kind) {
-        .ND_ADD => {
+        .ADD => {
             print("  add %rdi, %rax\n", .{});
         },
 
-        .ND_SUB => {
+        .SUB => {
             print("  sub %rdi, %rax\n", .{});
         },
 
-        .ND_MUL => {
+        .MUL => {
             print("  imul %rdi, %rax\n", .{});
         },
 
-        .ND_DIV => {
+        .DIV => {
             print("  cqo\n", .{});
             print("  idiv %rdi\n", .{});
         },
 
-        .ND_NUM => {
+        .INVALID, .ROOT, .NUM => {
             @panic("uh oh");
         },
     }
