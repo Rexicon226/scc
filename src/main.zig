@@ -9,17 +9,21 @@ const print = std.debug.print;
 
 const MAX_TOKENS = 10;
 
-pub fn stringToInt(source: []const u8) usize {
-    return std.fmt.parseInt(usize, source, 10) catch unreachable;
+pub fn stringToInt(source: []const u8) !usize {
+    return try std.fmt.parseInt(usize, source, 10);
 }
 
 pub const Kind = enum {
+    // Operators
     Plus,
     Minus,
     Mul,
     Div,
+
+    // Literals
     Number,
 
+    // Punctuation
     LeftParen,
     RightParen,
 };
@@ -181,9 +185,12 @@ pub const NodeKind = enum {
     SUB,
     MUL,
     DIV,
+
     NUM,
-    ROOT, // Only used for the root node
-    INVALID, // For empty AST nodes
+
+    NEG,
+
+    INVALID,
 };
 
 fn tok2node(kind: Kind) NodeKind {
@@ -253,6 +260,39 @@ pub const Node = struct {
         return node;
     }
 
+    pub fn new_negative(rhs: *Node) !*Node {
+        if (rhs.kind != .NUM) {
+            @panic("expected number");
+        }
+
+        const node = try allocator.create(Node);
+        const empty = try allocator.create(Node);
+        empty.kind = .INVALID;
+        node.kind = .NEG;
+
+        node.ast = Ast.new(.binary, .{
+            .lhs = empty,
+            .rhs = rhs,
+        });
+
+        return node;
+    }
+
+    // Used for 'double negative'.
+    // RHS is expected to be filled later.
+    pub fn empty_negative() !*Node {
+        const node = try allocator.create(Node);
+        const empty = try allocator.create(Node);
+        node.kind = .NEG;
+
+        node.ast = Ast.new(.binary, .{
+            .lhs = empty,
+            .rhs = empty,
+        });
+
+        return node;
+    }
+
     pub fn construct(source: [:0]const u8, tokens: []Token) !*Node {
         if (tokens.len == 0) {
             @panic("empty tokens");
@@ -266,7 +306,7 @@ pub const Node = struct {
                 @panic("expected number");
             }
 
-            const value = stringToInt(source[token.start..token.end]);
+            const value = try stringToInt(source[token.start..token.end]);
 
             return try Node.new_num(value);
         }
@@ -281,7 +321,7 @@ pub const Node = struct {
             const token = tokens[index];
 
             if (token.kind == .Number) {
-                const value = stringToInt(source[token.start..token.end]);
+                const value = try stringToInt(source[token.start..token.end]);
                 const node = try Node.new_num(value);
                 try operand_stack.append(node);
             } else if (token.kind == .LeftParen) {
@@ -305,10 +345,104 @@ pub const Node = struct {
 
                 try operand_stack.append(node);
                 index += i;
-            }
-            // something
-            else if (token.kind == .Plus or token.kind == .Minus or token.kind == .Mul or token.kind == .Div) {
-                while (operator_stack.items.len > 1 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
+            } else if (token.kind == .Plus or token.kind == .Minus) {
+
+                // Plus
+                if (token.kind == .Plus) {
+                    // If the token befoer the plus is a operator, this can be ignored
+                    if (index > 0 and tokens[index - 1].kind != .Number) {
+                        // try operator_stack.append(token.kind);
+                        index += 1;
+                        continue;
+                    }
+
+                    // If the token before the plus is a number, this is an addition
+                    while (operator_stack.items.len > 1 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
+                        const op = operator_stack.pop();
+
+                        const rhs = operand_stack.pop();
+                        const lhs = operand_stack.pop();
+                        const node = try Node.new_binary(tok2node(op), lhs, rhs);
+                        try operand_stack.append(node);
+                    }
+                    try operator_stack.append(token.kind);
+                }
+
+                // Print the token
+
+                // Check if there is a number before the minus, this is a subtraction
+                if (index > 0 and tokens[index - 1].kind == .Number) {
+                    while (operator_stack.items.len > 0 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
+                        const op = operator_stack.pop();
+
+                        const rhs = operand_stack.pop();
+                        const lhs = operand_stack.pop();
+                        const node = try Node.new_binary(tok2node(op), lhs, rhs);
+                        try operand_stack.append(node);
+                    }
+                    try operator_stack.append(token.kind);
+                    continue;
+                }
+
+                if (token.kind == .Minus) {
+                    const value = stringToInt(source[tokens[index + 1].start..tokens[index + 1].end]) catch {
+                        // Check if an empty negative is on the stack
+                        if (!(operand_stack.items.len > 0 and operand_stack.items[operand_stack.items.len - 1].kind == .NEG)) {
+                            const node = try empty_negative();
+                            try operand_stack.append(node);
+                            continue;
+                        }
+
+                        // Now there is a empty negative on the stack.
+                        // There can be up to 3 "signs" in a row, before the value.
+                        // Then it's a panic.
+
+                        // Check if the next token is a + or -
+                        if (tokens[index + 1].kind == .Plus or tokens[index + 1].kind == .Minus) {
+                            // Check if the next token is a number
+                            if (tokens[index + 2].kind == .Number) {
+                                const value = stringToInt(source[tokens[index + 2].start..tokens[index + 2].end]) catch {
+                                    @panic("invalid expression");
+                                };
+
+                                const node = try new_negative(try new_num(value));
+
+                                // Check if there already is a empty negative on the stack
+                                if (operand_stack.items.len > 0 and operand_stack.items[operand_stack.items.len - 1].kind == .NEG) {
+                                    const lhs = operand_stack.pop();
+                                    lhs.ast.binary.rhs = node;
+                                    try operand_stack.append(lhs);
+                                    index += 2;
+                                    continue;
+                                }
+
+                                try operand_stack.append(node);
+                                index += 3;
+                                continue;
+                            }
+                        }
+
+                        print("Token: {}\n", .{tokens[index]});
+                        @panic("invalid expression");
+                    };
+
+                    const node = try new_negative(try new_num(value));
+
+                    // Check if there already is a empty negative on the stack
+                    if (operand_stack.items.len > 0 and operand_stack.items[operand_stack.items.len - 1].kind == .NEG) {
+                        const lhs = operand_stack.pop();
+                        lhs.ast.binary.rhs = node;
+                        try operand_stack.append(lhs);
+                        index += 1;
+                        continue;
+                    }
+
+                    try operand_stack.append(node);
+                    index += 1;
+                    continue;
+                }
+            } else if (token.kind == .Mul or token.kind == .Div) {
+                while (operator_stack.items.len > 0 and hasHigherPrecedence(operator_stack.items[operator_stack.items.len - 1], token.kind)) {
                     const op = operator_stack.pop();
 
                     const rhs = operand_stack.pop();
@@ -320,7 +454,7 @@ pub const Node = struct {
             }
         }
 
-        while (operand_stack.items.len > 1) {
+        while (operand_stack.items.len > 1 and operator_stack.items.len > 0) {
             const op = operator_stack.pop();
             const rhs = operand_stack.pop();
             const lhs = operand_stack.pop();
@@ -395,29 +529,38 @@ fn parse(source: [:0]const u8) !void {
 }
 
 fn emit(node: *Node) void {
+    if (node.kind == .INVALID) {
+        return;
+    }
+
     if (node.kind == .NUM) {
         print("  mov ${d}, %rax\n", .{node.value});
+
+        return;
+    }
+
+    if (node.kind == .NEG) {
+        emit(node.ast.binary.rhs);
+        print("  neg %rax\n", .{});
+
         return;
     }
 
     switch (node.ast) {
         .binary => {
             emit(node.ast.binary.rhs);
+            push();
         },
         .invalid => {},
     }
-
-    push();
-    // emit(node.ast.binary.lhs);
 
     switch (node.ast) {
         .binary => {
             emit(node.ast.binary.lhs);
+            pop("%rdi");
         },
         .invalid => {},
     }
-
-    pop("%rdi");
 
     switch (node.kind) {
         .ADD => {
@@ -437,7 +580,11 @@ fn emit(node: *Node) void {
             print("  idiv %rdi\n", .{});
         },
 
-        .INVALID, .ROOT, .NUM => {
+        .NEG => {
+            print("  neg %rax\n", .{});
+        },
+
+        else => {
             @panic("uh oh");
         },
     }
