@@ -44,7 +44,7 @@ pub const Parser = struct {
         var statements = std.ArrayList(*Node).init(allocator);
 
         while (self.index < self.tokens.len) {
-            const node = self.assign(self.tokens[self.index]);
+            const node = self.statment(self.tokens[self.index]);
             try statements.append(node);
 
             self.skip(.SemiColon);
@@ -54,6 +54,20 @@ pub const Parser = struct {
         function.locals = self.locals.items;
 
         return function;
+    }
+
+    pub fn statment(self: *Parser, token: Token) *Node {
+        if (token.kind == .Return) {
+            self.index += 1;
+            const node = Node.new_unary(.RETURN, self.expression(self.tokens[self.index]));
+            return node;
+        }
+
+        return self.assign(token);
+    }
+
+    pub fn expression(self: *Parser, token: Token) *Node {
+        return self.assign(token);
     }
 
     pub fn assign(self: *Parser, token: Token) *Node {
@@ -301,6 +315,9 @@ pub const NodeKind = enum {
     NUM,
     VAR,
     ASSIGN,
+
+    // Keywords
+    RETURN,
 
     NEG,
 

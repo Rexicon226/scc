@@ -38,6 +38,7 @@ pub fn parse(source: [:0]const u8) !void {
         emit(node);
     }
 
+    print(".L.return:\n", .{});
     print("  mov %rbp, %rsp\n", .{});
     print("  pop %rbp\n", .{});
     print("  ret\n", .{});
@@ -85,6 +86,12 @@ fn emit(node: *Node) void {
     // print("Node: {}\n", .{node});
 
     if (node.kind == .INVALID) {
+        return;
+    }
+
+    if (node.kind == .RETURN) {
+        emit(node.ast.binary.lhs);
+        print("  jmp .L.return\n", .{});
         return;
     }
 

@@ -18,6 +18,9 @@ pub const Kind = enum {
     RightParen, // )
     Assign, // =
 
+    // Keywords
+    Return, // return
+
     // Compare
     Eq, // ==
     Ne, // !=
@@ -79,6 +82,31 @@ pub const Tokenizer = struct {
                 continue;
             }
 
+            // Keywords
+            // TODO: this is terrible lol
+            if (c == 'r') {
+                if (self.index + 6 < buffer.len) {
+                    if (buffer[self.index + 1] == 'e' and
+                        buffer[self.index + 2] == 't' and
+                        buffer[self.index + 3] == 'u' and
+                        buffer[self.index + 4] == 'r' and
+                        buffer[self.index + 5] == 'n' and
+                        buffer[self.index + 6] == ' ')
+                    {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .Return,
+                                self.index,
+                                self.index + 7,
+                            ),
+                        );
+
+                        self.index += 7;
+                        continue;
+                    }
+                }
+            }
+
             // Number
             if (std.ascii.isDigit(c)) {
                 const start = self.index;
@@ -124,6 +152,7 @@ pub const Tokenizer = struct {
                 continue;
             }
 
+            // Operators
             if (c == '+') {
                 try self.tokens.append(
                     try Token.new_token(
