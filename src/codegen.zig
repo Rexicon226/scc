@@ -108,9 +108,7 @@ fn emit(node: *Node) void {
                 emit(b.lhs);
                 emit(b.rhs);
             },
-            else => {
-                @panic("empty statement");
-            },
+            else => {},
         }
         return;
     }
