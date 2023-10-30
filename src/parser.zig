@@ -18,15 +18,29 @@ pub const Parser = struct {
     tokens: []Token,
     index: usize,
 
+    locals: std.ArrayList(*Object),
+
     pub fn init(source: [:0]const u8, tokens: []Token) Parser {
         return Parser{
             .source = source,
             .tokens = tokens,
             .index = 0,
+            .locals = std.ArrayList(*Object).init(allocator),
         };
     }
 
-    pub fn parse(self: *Parser) ![]*Node {
+    pub fn find_var(self: *Parser, tok: Token) ?*Object {
+        for (self.locals.items) |local| {
+            if (std.mem.eql(u8, local.name, self.source[tok.start..tok.end])) {
+                return local;
+            }
+        }
+        return null;
+    }
+
+    pub fn parse(self: *Parser) !*Function {
+        var function = try allocator.create(Function);
+
         var statements = std.ArrayList(*Node).init(allocator);
 
         while (self.index < self.tokens.len) {
@@ -36,7 +50,10 @@ pub const Parser = struct {
             self.skip(.SemiColon);
         }
 
-        return statements.items;
+        function.body = statements.items;
+        function.locals = self.locals.items;
+
+        return function;
     }
 
     pub fn assign(self: *Parser, token: Token) *Node {
@@ -169,9 +186,14 @@ pub const Parser = struct {
         }
 
         if (token.kind == .Variable) {
-            const node = Node.new_variable(self.source[token.start..token.end][0]);
+            var object = self.find_var(token);
             self.index += 1;
-            return node;
+            if (object) |obj| {
+                return Node.new_variable(obj);
+            } else {
+                const obj = Node.new_lvar(&self.locals, self.source[token.start..token.end]);
+                return Node.new_variable(obj);
+            }
         }
 
         if (token.kind == .Number) {
@@ -197,6 +219,7 @@ pub const Node = struct {
     kind: NodeKind,
     ast: Ast,
 
+    variable: *Object,
     value: usize,
     name: u8,
 
@@ -242,13 +265,28 @@ pub const Node = struct {
         return node;
     }
 
-    pub fn new_variable(name: u8) *Node {
+    pub fn new_variable(variable: *Object) *Node {
         const node = new_node(.VAR);
-        node.name = name;
+        node.variable = variable;
 
         node.ast = .invalid;
 
         return node;
+    }
+
+    pub fn new_lvar(locals: *std.ArrayList(*Object), name: []const u8) *Object {
+        var object = allocator.create(Object) catch {
+            @panic("failed to allocate object");
+        };
+        // TODO: I don't like this const cast.
+        object.name = name;
+        object.offset = 1;
+
+        locals.append(object) catch {
+            @panic("failed to append object");
+        };
+
+        return object;
     }
 };
 
@@ -309,4 +347,15 @@ pub const Ast = union(enum) {
     pub inline fn new(comptime k: std.meta.Tag(@This()), init: anytype) @This() {
         return @unionInit(@This(), @tagName(k), init);
     }
+};
+
+pub const Object = struct {
+    name: []const u8,
+    offset: isize, // Offset from RBP
+};
+
+pub const Function = struct {
+    body: []*Node,
+    locals: []*Object,
+    stack_size: usize,
 };

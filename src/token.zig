@@ -104,7 +104,8 @@ pub const Tokenizer = struct {
             // Variable
             if (std.ascii.isAlphabetic(c)) {
                 const start = self.index;
-                while (std.ascii.isAlphabetic(buffer[self.index])) {
+
+                while (std.ascii.isAlphanumeric(buffer[self.index])) {
                     self.index += 1;
 
                     if (self.index - start > MAX_TOKENS) {

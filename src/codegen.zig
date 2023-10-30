@@ -6,6 +6,7 @@ const Token = TokenImport.Token;
 const Kind = TokenImport.Kind;
 
 const Node = ParserImport.Node;
+const Function = ParserImport.Function;
 
 pub var allocator: std.mem.Allocator = undefined;
 
@@ -17,22 +18,23 @@ pub fn parse(source: [:0]const u8) !void {
     var tokenizer = TokenImport.Tokenizer.init(source, allocator);
     try tokenizer.tokens.ensureTotalCapacity(source.len);
 
-    print("  .globl main\n", .{});
-    print("main:\n", .{});
-
-    print("  push %rbp\n", .{});
-    print("  mov %rsp, %rbp\n", .{});
-    print("  sub $208, %rsp\n", .{});
-
     try tokenizer.generate();
 
     const tokens = try tokenizer.tokens.toOwnedSlice();
 
     var parser = ParserImport.Parser.init(source, tokens);
+    const function = try parser.parse();
 
-    const nodes = try parser.parse();
+    assign_lvar_offsets(function);
 
-    for (nodes) |node| {
+    print("  .globl main\n", .{});
+    print("main:\n", .{});
+
+    print("  push %rbp\n", .{});
+    print("  mov %rsp, %rbp\n", .{});
+    print("  sub ${d}, %rsp\n", .{function.stack_size});
+
+    for (function.body) |node| {
         emit(node);
     }
 
@@ -55,16 +57,28 @@ fn pop(reg: []const u8) void {
 }
 
 fn gen_addr(node: *Node) void {
-    // print("node: {}\n", .{node});
-
     if (node.kind == .VAR) {
-        const offset: i16 = @intCast((node.name - 'a' + 1) * 8);
-        print("  lea {d}(%rbp), %rax\n", .{-offset});
+        print("  lea {d}(%rbp), %rax\n", .{node.variable.offset});
         return;
     }
 
     std.log.err("found: {}\n", .{node});
     @panic("not an lvalue");
+}
+
+fn align_to(n: usize, al: usize) usize {
+    return (n + al - 1) / al * al;
+}
+
+fn assign_lvar_offsets(prog: *Function) void {
+    var offset: isize = 0;
+
+    for (prog.locals) |*local| {
+        offset += 8;
+        local.*.offset = -offset;
+    }
+
+    prog.stack_size = align_to(@intCast(offset), 16);
 }
 
 fn emit(node: *Node) void {
