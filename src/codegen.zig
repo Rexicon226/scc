@@ -89,6 +89,13 @@ fn emit(node: *Node) void {
         return;
     }
 
+    if (node.kind == .BLOCK) {
+        for (node.body) |n| {
+            emit(n);
+        }
+        return;
+    }
+
     if (node.kind == .RETURN) {
         emit(node.ast.binary.lhs);
         print("  jmp .L.return\n", .{});
@@ -195,6 +202,7 @@ fn emit(node: *Node) void {
         },
 
         else => {
+            std.log.err("found: {}\n", .{node});
             @panic("uh oh");
         },
     }

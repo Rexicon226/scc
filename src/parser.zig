@@ -46,8 +46,6 @@ pub const Parser = struct {
         while (self.index < self.tokens.len) {
             const node = self.statment(self.tokens[self.index]);
             try statements.append(node);
-
-            self.skip(.SemiColon);
         }
 
         function.body = statements.items;
@@ -63,7 +61,36 @@ pub const Parser = struct {
             return node;
         }
 
+        if (token.kind == .LeftBracket) {
+            self.index += 1;
+            const node = self.compound_statment();
+            self.skip(.RightBracket);
+            return node;
+        }
+
         return self.assign(token);
+    }
+
+    pub fn compound_statment(self: *Parser) *Node {
+        var body = std.ArrayList(*Node).init(allocator);
+
+        while (self.tokens[self.index].kind != .RightBracket) {
+            const node = self.statment(self.tokens[self.index]);
+
+            body.append(node) catch {
+                @panic("failed to append node");
+            };
+
+            // TODO: Bad solution, even though it kind of makes sense.
+            // Most blocks need a semicolon after them, but here, we don't.
+            if (!(self.tokens[self.index - 1].kind == .RightBracket)) {
+                self.skip(.SemiColon);
+            }
+        }
+
+        const node = Node.new_node(.BLOCK);
+        node.body = body.items;
+        return node;
     }
 
     pub fn expression(self: *Parser, token: Token) *Node {
@@ -202,6 +229,7 @@ pub const Parser = struct {
         if (token.kind == .Variable) {
             var object = self.find_var(token);
             self.index += 1;
+
             if (object) |obj| {
                 return Node.new_variable(obj);
             } else {
@@ -232,6 +260,8 @@ pub const Parser = struct {
 pub const Node = struct {
     kind: NodeKind,
     ast: Ast,
+
+    body: []*Node,
 
     variable: *Object,
     value: usize,
@@ -332,6 +362,7 @@ pub const NodeKind = enum {
     // Extra
     INVALID,
     STATEMENT,
+    BLOCK,
 };
 
 fn tok2node(kind: Kind) NodeKind {

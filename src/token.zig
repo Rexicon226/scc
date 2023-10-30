@@ -16,6 +16,9 @@ pub const Kind = enum {
     // Punctuation
     LeftParen, // (
     RightParen, // )
+    LeftBracket, // {
+    RightBracket, // }
+
     Assign, // =
 
     // Keywords
@@ -222,6 +225,32 @@ pub const Tokenizer = struct {
                 try self.tokens.append(
                     try Token.new_token(
                         .RightParen,
+                        self.index,
+                        self.index + 1,
+                    ),
+                );
+
+                self.index += 1;
+                continue;
+            }
+
+            if (c == '{') {
+                try self.tokens.append(
+                    try Token.new_token(
+                        .LeftBracket,
+                        self.index,
+                        self.index + 1,
+                    ),
+                );
+
+                self.index += 1;
+                continue;
+            }
+
+            if (c == '}') {
+                try self.tokens.append(
+                    try Token.new_token(
+                        .RightBracket,
                         self.index,
                         self.index + 1,
                     ),
