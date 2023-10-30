@@ -10,8 +10,6 @@ const Function = ParserImport.Function;
 
 pub var allocator: std.mem.Allocator = undefined;
 
-// Code Generation
-
 const print = std.debug.print;
 
 pub fn parse(source: [:0]const u8) !void {
@@ -82,10 +80,29 @@ fn assign_lvar_offsets(prog: *Function) void {
     prog.stack_size = align_to(@intCast(offset), 16);
 }
 
+var counter: usize = 0;
+
 fn emit(node: *Node) void {
     // print("Node: {}\n", .{node});
 
     if (node.kind == .INVALID) {
+        return;
+    }
+
+    if (node.kind == .IF) {
+        counter += 1;
+        emit(node.cond);
+        print("  cmp $0, %rax\n", .{});
+        print("  je  .L.else.{d}\n", .{counter});
+        emit(node.then);
+        print("  jmp .L.end.{d}\n", .{counter});
+        print(".L.else.{d}:\n", .{counter});
+
+        if (node.hasElse) {
+            emit(node.els);
+        }
+
+        print(".L.end.{d}:\n", .{counter});
         return;
     }
 
