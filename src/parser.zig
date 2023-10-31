@@ -43,6 +43,11 @@ pub const Parser = struct {
 
         var statements = std.ArrayList(*Node).init(allocator);
 
+        // Tokens
+        // for (self.tokens) |token| {
+        //     std.debug.print("Current: {}\n", .{token});
+        // }
+
         while (self.index < self.tokens.len) {
             const node = self.statement(self.tokens[self.index]);
             try statements.append(node);
@@ -63,6 +68,22 @@ pub const Parser = struct {
         if (token.kind == .Return) {
             self.index += 1;
             const node = Node.new_unary(.RETURN, self.expression(self.tokens[self.index]));
+            return node;
+        }
+
+        if (token.kind == .If) {
+            const node = Node.new_node(.IF);
+            self.index += 1;
+
+            self.skip(.LeftParen);
+            node.cond = self.expression(self.tokens[self.index]);
+            self.skip(.RightParen);
+            node.then = self.statement(self.tokens[self.index]);
+            if (self.tokens[self.index].kind == .Else) {
+                self.index += 1;
+                node.els = self.statement(self.tokens[self.index]);
+                node.hasElse = true;
+            }
             return node;
         }
 
@@ -266,6 +287,12 @@ pub const Node = struct {
     value: usize,
     name: u8,
 
+    // if
+    cond: *Node,
+    then: *Node,
+    els: *Node,
+    hasElse: bool = false,
+
     pub fn new_node(kind: NodeKind) *Node {
         const node = allocator.create(Node) catch {
             @panic("failed to allocate node");
@@ -347,6 +374,7 @@ pub const NodeKind = enum {
 
     // Keywords
     RETURN,
+    IF,
 
     NEG,
 

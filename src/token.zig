@@ -23,6 +23,8 @@ pub const Kind = enum {
 
     // Keywords
     Return, // return
+    If, // if
+    Else, // else
 
     // Compare
     Eq, // ==
@@ -86,27 +88,51 @@ pub const Tokenizer = struct {
             }
 
             // Keywords
-            // TODO: this is terrible lol
             if (c == 'r') {
-                if (self.index + 6 < buffer.len) {
-                    if (buffer[self.index + 1] == 'e' and
-                        buffer[self.index + 2] == 't' and
-                        buffer[self.index + 3] == 'u' and
-                        buffer[self.index + 4] == 'r' and
-                        buffer[self.index + 5] == 'n' and
-                        buffer[self.index + 6] == ' ')
-                    {
-                        try self.tokens.append(
-                            try Token.new_token(
-                                .Return,
-                                self.index,
-                                self.index + 7,
-                            ),
-                        );
+                const slice = buffer[self.index + 1 .. self.index + 7];
+                if (std.mem.eql(u8, slice, "eturn ")) {
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .Return,
+                            self.index,
+                            self.index + 7,
+                        ),
+                    );
 
-                        self.index += 7;
-                        continue;
-                    }
+                    self.index += 7;
+                    continue;
+                }
+            }
+
+            if (c == 'i') {
+                const slice = buffer[self.index + 1 .. self.index + 3];
+                if (std.mem.eql(u8, slice, "f ")) {
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .If,
+                            self.index,
+                            self.index + 3,
+                        ),
+                    );
+
+                    self.index += 3;
+                    continue;
+                }
+            }
+
+            if (c == 'e') {
+                const slice = buffer[self.index + 1 .. self.index + 5];
+                if (std.mem.eql(u8, slice, "lse ")) {
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .Else,
+                            self.index,
+                            self.index + 5,
+                        ),
+                    );
+
+                    self.index += 5;
+                    continue;
                 }
             }
 
