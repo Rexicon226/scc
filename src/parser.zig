@@ -44,7 +44,7 @@ pub const Parser = struct {
         var statements = std.ArrayList(*Node).init(allocator);
 
         while (self.index < self.tokens.len) {
-            const node = self.statment(self.tokens[self.index]);
+            const node = self.statement(self.tokens[self.index]);
             try statements.append(node);
         }
 
@@ -54,7 +54,7 @@ pub const Parser = struct {
         return function;
     }
 
-    pub fn statment(self: *Parser, token: Token) *Node {
+    pub fn statement(self: *Parser, token: Token) *Node {
         if (token.kind == .SemiColon) {
             self.index += 1;
             return Node.new_node(.STATEMENT);
@@ -68,7 +68,7 @@ pub const Parser = struct {
 
         if (token.kind == .LeftBracket) {
             self.index += 1;
-            const node = self.compound_statment();
+            const node = self.compound_statement();
             self.skip(.RightBracket);
             return node;
         }
@@ -76,11 +76,11 @@ pub const Parser = struct {
         return self.assign(token);
     }
 
-    pub fn compound_statment(self: *Parser) *Node {
+    pub fn compound_statement(self: *Parser) *Node {
         var body = std.ArrayList(*Node).init(allocator);
 
         while (self.tokens[self.index].kind != .RightBracket) {
-            const node = self.statment(self.tokens[self.index]);
+            const node = self.statement(self.tokens[self.index]);
 
             body.append(node) catch {
                 @panic("failed to append node");
