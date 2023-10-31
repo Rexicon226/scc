@@ -55,6 +55,11 @@ pub const Parser = struct {
     }
 
     pub fn statment(self: *Parser, token: Token) *Node {
+        if (token.kind == .SemiColon) {
+            self.index += 1;
+            return Node.new_node(.STATEMENT);
+        }
+
         if (token.kind == .Return) {
             self.index += 1;
             const node = Node.new_unary(.RETURN, self.expression(self.tokens[self.index]));
@@ -80,12 +85,6 @@ pub const Parser = struct {
             body.append(node) catch {
                 @panic("failed to append node");
             };
-
-            // TODO: Bad solution, even though it kind of makes sense.
-            // Most blocks need a semicolon after them, but here, we don't.
-            if (!(self.tokens[self.index - 1].kind == .RightBracket)) {
-                self.skip(.SemiColon);
-            }
         }
 
         const node = Node.new_node(.BLOCK);
