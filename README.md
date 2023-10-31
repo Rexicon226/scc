@@ -10,7 +10,7 @@ Heavily inspired from https://github.com/rui314/chibicc, the parser code is geni
 - [ ] Pointer Arthemtics
 - [ ] Pointers
 - [ ] While Statement
-- [ ] For Statement
+- [x] For Statement
 - [x] Blocks `{ ... }`
 - [x] If Statement
 - [x] Multi Character Variables
