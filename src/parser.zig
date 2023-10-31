@@ -45,7 +45,7 @@ pub const Parser = struct {
 
         // Tokens
         // for (self.tokens) |token| {
-        //     std.debug.print("Current: {}\n", .{token});
+        //     std.debug.print("Token: {}\n", .{token});
         // }
 
         while (self.index < self.tokens.len) {
@@ -59,12 +59,11 @@ pub const Parser = struct {
         return function;
     }
 
-    pub fn statement(self: *Parser, token: Token) *Node {
-        if (token.kind == .SemiColon) {
-            self.index += 1;
-            return Node.new_node(.STATEMENT);
-        }
+    fn print_current(self: *Parser) void {
+        std.debug.print("Current: {}\n", .{self.tokens[self.index]});
+    }
 
+    pub fn statement(self: *Parser, token: Token) *Node {
         if (token.kind == .Return) {
             self.index += 1;
             const node = Node.new_unary(.RETURN, self.expression(self.tokens[self.index]));
@@ -87,6 +86,29 @@ pub const Parser = struct {
             return node;
         }
 
+        if (token.kind == .For) {
+            const node = Node.new_node(.FOR);
+            self.index += 1;
+            self.skip(.LeftParen);
+
+            node.init = self.expr_stmt(self.tokens[self.index]);
+
+            if (!(self.tokens[self.index].kind == .SemiColon)) {
+                node.cond = self.expression(self.tokens[self.index]);
+                node.hasCond = true;
+            }
+            self.skip(.SemiColon);
+
+            if (!(self.tokens[self.index].kind == .RightParen)) {
+                node.inc = self.expression(self.tokens[self.index]);
+                node.hasInc = true;
+            }
+            self.skip(.RightParen);
+
+            node.then = self.statement(self.tokens[self.index]);
+            return node;
+        }
+
         if (token.kind == .LeftBracket) {
             self.index += 1;
             const node = self.compound_statement();
@@ -94,7 +116,7 @@ pub const Parser = struct {
             return node;
         }
 
-        return self.assign(token);
+        return self.expression(token);
     }
 
     pub fn compound_statement(self: *Parser) *Node {
@@ -114,7 +136,23 @@ pub const Parser = struct {
     }
 
     pub fn expression(self: *Parser, token: Token) *Node {
+        if (token.kind == .SemiColon) {
+            self.index += 1;
+            return Node.new_node(.STATEMENT);
+        }
+
         return self.assign(token);
+    }
+
+    pub fn expr_stmt(self: *Parser, token: Token) *Node {
+        if (token.kind == .SemiColon) {
+            self.index += 1;
+            return Node.new_node(.STATEMENT);
+        }
+
+        const node = self.assign(token);
+        self.skip(.SemiColon);
+        return node;
     }
 
     pub fn assign(self: *Parser, token: Token) *Node {
@@ -269,8 +307,13 @@ pub const Parser = struct {
     }
 
     pub fn skip(self: *Parser, op: TokenImport.Kind) void {
-        if (self.tokens[self.index].kind != op) {
-            std.log.err("Found: {}", .{self.tokens[self.index].kind});
+        const token = self.tokens[self.index];
+        if (token.kind != op) {
+            std.log.err("Found: {} at {d}..{d}", .{
+                token.kind,
+                token.start,
+                token.end,
+            });
             @panic("SKIP: found wrong operator");
         }
         self.index += 1;
@@ -292,6 +335,12 @@ pub const Node = struct {
     then: *Node,
     els: *Node,
     hasElse: bool = false,
+    hasCond: bool = false,
+
+    // for
+    init: *Node,
+    inc: *Node,
+    hasInc: bool = false,
 
     pub fn new_node(kind: NodeKind) *Node {
         const node = allocator.create(Node) catch {
@@ -375,6 +424,7 @@ pub const NodeKind = enum {
     // Keywords
     RETURN,
     IF,
+    FOR,
 
     NEG,
 
