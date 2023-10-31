@@ -13,4 +13,4 @@ steps:
   test:
     image: sinontm/ziglang:v2
     commands:
-      - ./test.sh
+      - zig build test
