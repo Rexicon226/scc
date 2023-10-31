@@ -106,7 +106,30 @@ fn emit(node: *Node) void {
         return;
     }
 
+    if (node.kind == .FOR) {
+        counter += 1;
+        emit(node.init);
+        print(".L.begin.{d}:\n", .{counter});
+
+        if (node.hasCond) {
+            emit(node.cond);
+            print("  cmp $0, %rax\n", .{});
+            print("  je  .L.end.{d}\n", .{counter});
+        }
+        emit(node.then);
+
+        if (node.hasInc) {
+            emit(node.inc);
+        }
+
+        print("  jmp .L.begin.{d}\n", .{counter});
+        print(".L.end.{d}:\n", .{counter});
+        return;
+    }
+
     if (node.kind == .BLOCK) {
+        // if (node.body.len == 0) return;
+
         for (node.body) |n| {
             emit(n);
         }

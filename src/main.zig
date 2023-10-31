@@ -27,5 +27,6 @@ pub fn main() !void {
 
     // const data = try source.readToEndAlloc(allocator, 500);
 
+    // try CodeGen.parse("{ i=0; j=0; for (i=0; i<=10; i=i+1) j=i+j; return j; }");
     try CodeGen.parse(file);
 }
