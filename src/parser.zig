@@ -109,6 +109,21 @@ pub const Parser = struct {
             return node;
         }
 
+        if (token.kind == .While) {
+            const node = Node.new_node(.FOR);
+            self.index += 1;
+
+            self.skip(.LeftParen);
+
+            node.cond = self.expression(self.tokens[self.index]);
+            node.hasCond = true;
+
+            self.skip(.RightParen);
+
+            node.then = self.statement(self.tokens[self.index]);
+            return node;
+        }
+
         if (token.kind == .LeftBracket) {
             self.index += 1;
             const node = self.compound_statement();
@@ -339,6 +354,7 @@ pub const Node = struct {
 
     // for
     init: *Node,
+    hasInit: bool = false,
     inc: *Node,
     hasInc: bool = false,
 
@@ -425,6 +441,7 @@ pub const NodeKind = enum {
     RETURN,
     IF,
     FOR,
+    WHILE,
 
     NEG,
 

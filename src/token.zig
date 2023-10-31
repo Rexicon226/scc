@@ -26,6 +26,7 @@ pub const Kind = enum {
     If, // if
     Else, // else
     For, // for
+    While, // while
 
     // Compare
     Eq, // ==
@@ -149,6 +150,22 @@ pub const Tokenizer = struct {
                     );
 
                     self.index += 4;
+                    continue;
+                }
+            }
+
+            if (c == 'w') {
+                const slice = buffer[self.index + 1 .. self.index + 5];
+                if (std.mem.eql(u8, slice, "hile")) {
+                    try self.tokens.append(
+                        try Token.new_token(
+                            .While,
+                            self.index,
+                            self.index + 5,
+                        ),
+                    );
+
+                    self.index += 5;
                     continue;
                 }
             }

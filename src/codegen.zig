@@ -108,7 +108,8 @@ fn emit(node: *Node) void {
 
     if (node.kind == .FOR) {
         counter += 1;
-        emit(node.init);
+        if (node.hasInit) emit(node.init);
+
         print(".L.begin.{d}:\n", .{counter});
 
         if (node.hasCond) {
@@ -118,9 +119,7 @@ fn emit(node: *Node) void {
         }
         emit(node.then);
 
-        if (node.hasInc) {
-            emit(node.inc);
-        }
+        if (node.hasInc) emit(node.inc);
 
         print("  jmp .L.begin.{d}\n", .{counter});
         print(".L.end.{d}:\n", .{counter});
