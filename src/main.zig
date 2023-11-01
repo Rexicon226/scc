@@ -29,12 +29,22 @@ pub fn main() !void {
 
     CodeGen.allocator = allocator;
 
-    if (args.len != 2) {
+    if (args.len < 2) {
         std.log.warn("Usage: {s} <code>\n", .{args[0]});
         return error.InvalidArguments;
     }
 
     const file = args[1];
+
+    if (std.mem.eql(u8, file, "--cli")) {
+        const cli = args[2];
+
+        const errorManager = ErrorManager.init(allocator, cli);
+        ParserImport.errorManager = errorManager;
+
+        try CodeGen.parse(cli, "cli", .{ .print = true });
+        return;
+    }
 
     var source = try std.fs.cwd().openFile(file, .{});
     defer source.close();
@@ -48,5 +58,5 @@ pub fn main() !void {
     var outputFileName = outputFile.next().?;
     outputFileName = try std.fmt.allocPrint(allocator, "{s}.s", .{outputFileName});
 
-    try CodeGen.parse(data, outputFileName);
+    try CodeGen.parse(data, outputFileName, null);
 }

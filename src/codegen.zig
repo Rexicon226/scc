@@ -12,7 +12,6 @@ pub var allocator: std.mem.Allocator = undefined;
 // pub var stdout: std.io = undefined;
 
 pub var file: std.fs.File = undefined;
-
 pub fn print(comptime format: []const u8, args: anytype) void {
     const stdout = file.writer();
     stdout.print(format, args) catch @panic("failed to write");
@@ -22,8 +21,23 @@ fn setupOutputFile(output_file: []const u8) !void {
     file = try std.fs.cwd().createFile(output_file, .{});
 }
 
-pub fn parse(source: [:0]const u8, output_file: []const u8) !void {
-    try setupOutputFile(output_file);
+fn setupPrint() void {
+    file = std.io.getStdOut();
+}
+
+pub const ParserOptions = struct {
+    print: bool = false,
+};
+
+pub fn parse(source: [:0]const u8, output_file: []const u8, options: ?ParserOptions) !void {
+    if (options) |o| {
+        if (o.print) {
+            setupPrint();
+        }
+    } else {
+        try setupOutputFile(output_file);
+    }
+
     var tokenizer = TokenImport.Tokenizer.init(source, allocator);
     try tokenizer.tokens.ensureTotalCapacity(source.len);
 
