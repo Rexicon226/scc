@@ -45,15 +45,24 @@ pub const Token = struct {
     start: usize,
     end: usize,
 
+    // Metadata
+    line: usize = 1,
+    column: usize = 1,
+    file: []const u8 = "no file yet dummy",
+
     pub fn new_token(
         kind: Kind,
         start: usize,
         end: usize,
+        line: usize,
+        column: usize,
     ) !Token {
         return .{
             .kind = kind,
             .start = start,
             .end = end,
+            .line = line,
+            .column = column,
         };
     }
 };
@@ -65,12 +74,20 @@ pub const Tokenizer = struct {
 
     allocator: std.mem.Allocator,
 
+    line: usize = 0,
+    column: usize = 0,
+
     pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) Tokenizer {
         return Tokenizer{
             .buffer = source,
             .tokens = std.ArrayList(Token).init(allocator),
             .allocator = allocator,
         };
+    }
+
+    pub inline fn advance(self: *Tokenizer, amount: usize) void {
+        self.index += amount;
+        self.column += amount;
     }
 
     pub fn generate(self: *Tokenizer) !void {
@@ -85,7 +102,15 @@ pub const Tokenizer = struct {
 
             // Space
             if (c == ' ') {
+                self.advance(1);
+                continue;
+            }
+
+            // Newline
+            if (c == '\n') {
+                self.column = 1;
                 self.index += 1;
+                self.line += 1;
                 continue;
             }
 
@@ -98,10 +123,12 @@ pub const Tokenizer = struct {
                             .Return,
                             self.index,
                             self.index + 7,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 7;
+                    self.advance(7);
                     continue;
                 }
             }
@@ -114,10 +141,12 @@ pub const Tokenizer = struct {
                             .If,
                             self.index,
                             self.index + 3,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 3;
+                    self.advance(3);
                     continue;
                 }
             }
@@ -130,10 +159,12 @@ pub const Tokenizer = struct {
                             .Else,
                             self.index,
                             self.index + 5,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 5;
+                    self.advance(5);
                     continue;
                 }
             }
@@ -146,10 +177,12 @@ pub const Tokenizer = struct {
                             .For,
                             self.index,
                             self.index + 4,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 4;
+                    self.advance(4);
                     continue;
                 }
             }
@@ -162,10 +195,12 @@ pub const Tokenizer = struct {
                             .While,
                             self.index,
                             self.index + 5,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 5;
+                    self.advance(5);
                     continue;
                 }
             }
@@ -174,7 +209,7 @@ pub const Tokenizer = struct {
             if (std.ascii.isDigit(c)) {
                 const start = self.index;
                 while (std.ascii.isDigit(buffer[self.index])) {
-                    self.index += 1;
+                    self.advance(1);
 
                     if (self.index - start > MAX_TOKENS) {
                         @panic("token too long");
@@ -186,6 +221,8 @@ pub const Tokenizer = struct {
                         .Number,
                         start,
                         self.index,
+                        self.line,
+                        self.column,
                     ),
                 );
 
@@ -197,7 +234,7 @@ pub const Tokenizer = struct {
                 const start = self.index;
 
                 while (std.ascii.isAlphanumeric(buffer[self.index])) {
-                    self.index += 1;
+                    self.advance(1);
 
                     if (self.index - start > MAX_TOKENS) {
                         @panic("token too long");
@@ -209,6 +246,8 @@ pub const Tokenizer = struct {
                         .Variable,
                         start,
                         self.index,
+                        self.line,
+                        self.column,
                     ),
                 );
 
@@ -222,10 +261,12 @@ pub const Tokenizer = struct {
                         .Plus,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -235,10 +276,12 @@ pub const Tokenizer = struct {
                         .Minus,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -248,10 +291,12 @@ pub const Tokenizer = struct {
                         .Mul,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -261,10 +306,12 @@ pub const Tokenizer = struct {
                         .Div,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -274,10 +321,12 @@ pub const Tokenizer = struct {
                         .LeftParen,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -287,10 +336,12 @@ pub const Tokenizer = struct {
                         .RightParen,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -300,10 +351,12 @@ pub const Tokenizer = struct {
                         .LeftBracket,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -313,10 +366,12 @@ pub const Tokenizer = struct {
                         .RightBracket,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -326,10 +381,12 @@ pub const Tokenizer = struct {
                         .SemiColon,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -340,10 +397,12 @@ pub const Tokenizer = struct {
                             .Eq,
                             self.index,
                             self.index + 2,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 2;
+                    self.advance(2);
                     continue;
                 }
 
@@ -352,10 +411,12 @@ pub const Tokenizer = struct {
                         .Assign,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -367,10 +428,12 @@ pub const Tokenizer = struct {
                                 .Ge,
                                 self.index,
                                 self.index + 2,
+                                self.line,
+                                self.column,
                             ),
                         );
 
-                        self.index += 2;
+                        self.advance(2);
                         continue;
                     }
 
@@ -379,10 +442,12 @@ pub const Tokenizer = struct {
                             .Gt,
                             self.index,
                             self.index + 1,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 1;
+                    self.advance(1);
                     continue;
                 }
             }
@@ -395,10 +460,12 @@ pub const Tokenizer = struct {
                                 .Le,
                                 self.index,
                                 self.index + 2,
+                                self.line,
+                                self.column,
                             ),
                         );
 
-                        self.index += 2;
+                        self.advance(2);
                         continue;
                     }
 
@@ -407,10 +474,12 @@ pub const Tokenizer = struct {
                             .Lt,
                             self.index,
                             self.index + 1,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 1;
+                    self.advance(1);
                     continue;
                 }
             }
@@ -422,15 +491,18 @@ pub const Tokenizer = struct {
                             .Ne,
                             self.index,
                             self.index + 2,
+                            self.line,
+                            self.column,
                         ),
                     );
 
-                    self.index += 2;
+                    self.advance(2);
                     continue;
                 }
             }
 
-            @panic("invalid character");
+            std.log.err("invalid character: {}", .{c});
+            @panic("tokenizer");
         }
     }
 };

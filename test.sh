@@ -3,7 +3,7 @@ assert() {
   expected="$1"
   input="$2"
 
-  ./zig-out/bin/scc "$input" 2> tmp.s || exit
+  ./zig-out/bin/scc --cli "$input" > tmp.s || exit
   gcc -static -o tmp tmp.s
   ./tmp
   actual="$?"
