@@ -90,6 +90,10 @@ pub const Report = struct {
         return lhs.location.column < rhs.location.column;
     }
 
+    pub fn greaterThanReport(_: void, lhs: ReportItem, rhs: ReportItem) bool {
+        return lhs.location.column > rhs.location.column;
+    }
+
     pub fn report(
         self: *Report,
         out: anytype,
@@ -118,39 +122,54 @@ pub const Report = struct {
 
         // Calculate stuff
         if (self.items.len > 1) {
-            var up_dash = std.ArrayList([]u8).init(self.allocator);
+            var up_dash = std.ArrayList(u8).init(self.allocator);
             // Max amount it will take.
             try up_dash.ensureTotalCapacity(self.source_range.len);
 
             var items = self.items[1..];
+            var reverse_items: []ReportItem = try self.allocator.alloc(ReportItem, self.items.len - 1);
+            @memcpy(reverse_items, items);
 
             // Sort the items by the column.
             std.sort.insertion(ReportItem, items, void{}, lessThanReport);
+            std.sort.insertion(ReportItem, reverse_items, void{}, greaterThanReport);
 
-            var current_offset: usize = 1;
-
+            var item_index: usize = 0;
+            var depth: usize = 0;
+            var on: usize = 1;
             // Go through each line, printing how many brackets we need,
             // With the spacing they need.
             for (items) |item| {
-                // Create the spaces we need.
-                const side_offset = item.location.column - current_offset;
-                std.debug.print("Column: {d}\n", .{item.location.column});
+                try up_dash.appendSlice("      ");
 
-                const spaces = try self.allocator.alloc(u8, side_offset);
-                @memset(spaces, 'a');
+                for (1..(slice.len - depth) + 1) |i| {
+                    if (i == items[item_index].location.column) {
+                        if (i == reverse_items[on - 1].location.column) {
+                            try up_dash.appendSlice("╰── ");
+                            try up_dash.appendSlice(item.message);
+                        } else {
+                            try up_dash.append('|');
+                        }
 
-                current_offset = side_offset + current_offset;
-                try up_dash.append(spaces);
+                        item_index += 1;
+                    } else {
+                        try up_dash.append(' ');
+                    }
+                }
+
+                // Calculate the gap between the last index, and the second to last.
+                if (on < items.len) {
+                    const gap = items[items.len - on].location.column - items[items.len - (on + 1)].location.column;
+                    depth += gap;
+                }
+
+                item_index = 0;
+                on += 1;
+                try up_dash.append('\n');
             }
-
-            try out.print("     ", .{});
 
             // Print the dashes.
-            for (up_dash.items) |dash| {
-                try out.print("{s}|", .{dash});
-            }
-
-            try out.print("\n", .{});
+            try out.print("{s}\n", .{up_dash.items});
         }
     }
 };
