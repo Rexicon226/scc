@@ -7,7 +7,6 @@ const Kind = TokenImport.Kind;
 pub var allocator: std.mem.Allocator = undefined;
 
 const ErrorManager = @import("error.zig").ErrorManager;
-const ErrorType = @import("error.zig").Error;
 const ReportItem = @import("error.zig").ReportItem;
 pub var errorManager: ErrorManager = undefined;
 
@@ -334,11 +333,32 @@ pub const Parser = struct {
 
             reports.append(ReportItem{
                 .kind = .@"error",
-                .location = token,
+                .location = token.line,
                 .message = std.fmt.allocPrint(allocator, "should be a {}", .{op}) catch @panic("failed to allocate report print"),
             }) catch @panic("failed to allocate report");
 
-            errorManager.panic(ErrorType.missing_token, "missing type", &reports.items);
+            reports.append(ReportItem{
+                .kind = .@"error",
+                .location = .{
+                    .start = token.line.start,
+                    .end = token.line.end,
+                    .column = 1,
+                    .line = token.line.line,
+                },
+                .message = "here >:C",
+            }) catch @panic("failed to allocate report");
+
+            reports.append(ReportItem{
+                .kind = .@"error",
+                .location = token.line,
+                .message = "and here >:C",
+            }) catch @panic("failed to allocate report");
+
+            errorManager.panic(
+                .missing_token,
+                &reports.items,
+                self.source[token.line.start..token.line.end],
+            );
         }
         self.index += 1;
     }
