@@ -39,21 +39,40 @@ pub const Kind = enum {
     SemiColon, // ;
 };
 
+pub const Line = struct {
+    // The start and end of index of the line, that the token is one
+    start: usize,
+    end: usize,
+
+    // Normal
+    line: usize,
+    column: usize,
+};
+
 pub const Token = struct {
     kind: Kind,
 
     start: usize,
     end: usize,
 
+    // Metadata
+    line: Line,
+    column: usize,
+    file: []const u8 = "no file yet dummy",
+
     pub fn new_token(
         kind: Kind,
         start: usize,
         end: usize,
+        line: Line,
+        column: usize,
     ) !Token {
         return .{
             .kind = kind,
             .start = start,
             .end = end,
+            .line = line,
+            .column = column,
         };
     }
 };
@@ -65,12 +84,19 @@ pub const Tokenizer = struct {
 
     allocator: std.mem.Allocator,
 
+    line: Line = .{ .start = 0, .end = 0, .line = 1, .column = 1 },
+
     pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) Tokenizer {
         return Tokenizer{
             .buffer = source,
             .tokens = std.ArrayList(Token).init(allocator),
             .allocator = allocator,
         };
+    }
+
+    pub inline fn advance(self: *Tokenizer, amount: usize) void {
+        self.index += amount;
+        self.line.column += amount;
     }
 
     pub fn generate(self: *Tokenizer) !void {
@@ -80,93 +106,142 @@ pub const Tokenizer = struct {
             @panic("empty buffer");
         }
 
+        var pre_lines = std.mem.splitSequence(u8, buffer, "\n");
+        var current_line: []const u8 = pre_lines.next().?;
+        var current_line_offset: usize = 0;
+
+        self.line = .{
+            .start = current_line_offset,
+            .end = current_line_offset + current_line.len,
+            .line = 1,
+            .column = 1,
+        };
+
         while (self.index < buffer.len) {
             const c = buffer[self.index];
 
             // Space
             if (c == ' ') {
+                self.advance(1);
+                continue;
+            }
+
+            // Newline
+            if (c == '\n') {
+                self.line.column = 1;
                 self.index += 1;
+
+                current_line = pre_lines.next().?;
+                current_line_offset = self.index;
+
+                self.line = .{
+                    .start = current_line_offset,
+                    .end = current_line_offset + current_line.len,
+                    .line = self.line.line + 1,
+                    .column = 1,
+                };
+
                 continue;
             }
 
             // Keywords
             if (c == 'r') {
-                const slice = buffer[self.index + 1 .. self.index + 7];
-                if (std.mem.eql(u8, slice, "eturn ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .Return,
-                            self.index,
-                            self.index + 7,
-                        ),
-                    );
+                if (buffer[self.index..].len > 7) {
+                    const slice = buffer[self.index + 1 .. self.index + 7];
+                    if (std.mem.eql(u8, slice, "eturn ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .Return,
+                                self.index,
+                                self.index + 7,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.index += 7;
-                    continue;
+                        self.advance(7);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'i') {
-                const slice = buffer[self.index + 1 .. self.index + 3];
-                if (std.mem.eql(u8, slice, "f ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .If,
-                            self.index,
-                            self.index + 3,
-                        ),
-                    );
+                if (buffer[self.index..].len > 3) {
+                    const slice = buffer[self.index + 1 .. self.index + 3];
+                    if (std.mem.eql(u8, slice, "f ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .If,
+                                self.index,
+                                self.index + 3,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.index += 3;
-                    continue;
+                        self.advance(3);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'e') {
-                const slice = buffer[self.index + 1 .. self.index + 5];
-                if (std.mem.eql(u8, slice, "lse ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .Else,
-                            self.index,
-                            self.index + 5,
-                        ),
-                    );
+                if (buffer[self.index..].len > 5) {
+                    const slice = buffer[self.index + 1 .. self.index + 5];
+                    if (std.mem.eql(u8, slice, "lse ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .Else,
+                                self.index,
+                                self.index + 5,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.index += 5;
-                    continue;
+                        self.advance(5);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'f') {
-                const slice = buffer[self.index + 1 .. self.index + 4];
-                if (std.mem.eql(u8, slice, "or ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .For,
-                            self.index,
-                            self.index + 4,
-                        ),
-                    );
+                if (buffer[self.index..].len > 4) {
+                    const slice = buffer[self.index + 1 .. self.index + 4];
+                    if (std.mem.eql(u8, slice, "or ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .For,
+                                self.index,
+                                self.index + 4,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.index += 4;
-                    continue;
+                        self.advance(4);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'w') {
-                const slice = buffer[self.index + 1 .. self.index + 5];
-                if (std.mem.eql(u8, slice, "hile")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .While,
-                            self.index,
-                            self.index + 5,
-                        ),
-                    );
+                if (buffer[self.index..].len > 5) {
+                    const slice = buffer[self.index + 1 .. self.index + 5];
+                    if (std.mem.eql(u8, slice, "hile")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .While,
+                                self.index,
+                                self.index + 5,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.index += 5;
-                    continue;
+                        self.advance(5);
+                        continue;
+                    }
                 }
             }
 
@@ -174,7 +249,7 @@ pub const Tokenizer = struct {
             if (std.ascii.isDigit(c)) {
                 const start = self.index;
                 while (std.ascii.isDigit(buffer[self.index])) {
-                    self.index += 1;
+                    self.advance(1);
 
                     if (self.index - start > MAX_TOKENS) {
                         @panic("token too long");
@@ -186,6 +261,8 @@ pub const Tokenizer = struct {
                         .Number,
                         start,
                         self.index,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
@@ -197,7 +274,7 @@ pub const Tokenizer = struct {
                 const start = self.index;
 
                 while (std.ascii.isAlphanumeric(buffer[self.index])) {
-                    self.index += 1;
+                    self.advance(1);
 
                     if (self.index - start > MAX_TOKENS) {
                         @panic("token too long");
@@ -209,6 +286,8 @@ pub const Tokenizer = struct {
                         .Variable,
                         start,
                         self.index,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
@@ -222,10 +301,12 @@ pub const Tokenizer = struct {
                         .Plus,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -235,10 +316,12 @@ pub const Tokenizer = struct {
                         .Minus,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -248,10 +331,12 @@ pub const Tokenizer = struct {
                         .Mul,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -261,10 +346,12 @@ pub const Tokenizer = struct {
                         .Div,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -274,10 +361,12 @@ pub const Tokenizer = struct {
                         .LeftParen,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -287,10 +376,12 @@ pub const Tokenizer = struct {
                         .RightParen,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -300,10 +391,12 @@ pub const Tokenizer = struct {
                         .LeftBracket,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -313,10 +406,12 @@ pub const Tokenizer = struct {
                         .RightBracket,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -326,10 +421,12 @@ pub const Tokenizer = struct {
                         .SemiColon,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -340,10 +437,12 @@ pub const Tokenizer = struct {
                             .Eq,
                             self.index,
                             self.index + 2,
+                            self.line,
+                            self.line.column,
                         ),
                     );
 
-                    self.index += 2;
+                    self.advance(2);
                     continue;
                 }
 
@@ -352,10 +451,12 @@ pub const Tokenizer = struct {
                         .Assign,
                         self.index,
                         self.index + 1,
+                        self.line,
+                        self.line.column,
                     ),
                 );
 
-                self.index += 1;
+                self.advance(1);
                 continue;
             }
 
@@ -367,10 +468,12 @@ pub const Tokenizer = struct {
                                 .Ge,
                                 self.index,
                                 self.index + 2,
+                                self.line,
+                                self.line.column,
                             ),
                         );
 
-                        self.index += 2;
+                        self.advance(2);
                         continue;
                     }
 
@@ -379,10 +482,12 @@ pub const Tokenizer = struct {
                             .Gt,
                             self.index,
                             self.index + 1,
+                            self.line,
+                            self.line.column,
                         ),
                     );
 
-                    self.index += 1;
+                    self.advance(1);
                     continue;
                 }
             }
@@ -395,10 +500,12 @@ pub const Tokenizer = struct {
                                 .Le,
                                 self.index,
                                 self.index + 2,
+                                self.line,
+                                self.line.column,
                             ),
                         );
 
-                        self.index += 2;
+                        self.advance(2);
                         continue;
                     }
 
@@ -407,10 +514,12 @@ pub const Tokenizer = struct {
                             .Lt,
                             self.index,
                             self.index + 1,
+                            self.line,
+                            self.line.column,
                         ),
                     );
 
-                    self.index += 1;
+                    self.advance(1);
                     continue;
                 }
             }
@@ -422,15 +531,18 @@ pub const Tokenizer = struct {
                             .Ne,
                             self.index,
                             self.index + 2,
+                            self.line,
+                            self.line.column,
                         ),
                     );
 
-                    self.index += 2;
+                    self.advance(2);
                     continue;
                 }
             }
 
-            @panic("invalid character");
+            std.log.err("invalid character: {}", .{c});
+            @panic("tokenizer");
         }
     }
 };

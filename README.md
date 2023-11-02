@@ -18,3 +18,7 @@ Heavily inspired from https://github.com/rui314/chibicc, the parser code is geni
 - [x] Null Statement
 - [x] Equalities `<= != ==`
 - [x] Unaries
+
+## Cool Sources
+
+[A simple, possibly correct LR parser for C11](http://gallium.inria.fr/~fpottier/publis/jourdan-fpottier-2016.pdf)

@@ -6,6 +6,10 @@ const Kind = TokenImport.Kind;
 
 pub var allocator: std.mem.Allocator = undefined;
 
+const ErrorManager = @import("error.zig").ErrorManager;
+const ReportItem = @import("error.zig").ReportItem;
+pub var errorManager: ErrorManager = undefined;
+
 pub fn stringToInt(source: []const u8) usize {
     return std.fmt.parseInt(usize, source, 10) catch {
         std.log.err("Failed to parse int: {s}\n", .{source});
@@ -65,21 +69,22 @@ pub const Parser = struct {
 
     pub fn statement(self: *Parser, token: Token) *Node {
         if (token.kind == .Return) {
-            self.index += 1;
+            self.skip(.Return);
             const node = Node.new_unary(.RETURN, self.expression(self.tokens[self.index]));
+            self.skip(.SemiColon);
             return node;
         }
 
         if (token.kind == .If) {
             const node = Node.new_node(.IF);
-            self.index += 1;
+            self.skip(.If);
 
             self.skip(.LeftParen);
             node.cond = self.expression(self.tokens[self.index]);
             self.skip(.RightParen);
             node.then = self.statement(self.tokens[self.index]);
             if (self.tokens[self.index].kind == .Else) {
-                self.index += 1;
+                self.skip(.Else);
                 node.els = self.statement(self.tokens[self.index]);
                 node.hasElse = true;
             }
@@ -88,7 +93,7 @@ pub const Parser = struct {
 
         if (token.kind == .For) {
             const node = Node.new_node(.FOR);
-            self.index += 1;
+            self.skip(.For);
             self.skip(.LeftParen);
 
             node.init = self.expr_stmt(self.tokens[self.index]);
@@ -111,7 +116,7 @@ pub const Parser = struct {
 
         if (token.kind == .While) {
             const node = Node.new_node(.FOR);
-            self.index += 1;
+            self.skip(.While);
 
             self.skip(.LeftParen);
 
@@ -125,7 +130,7 @@ pub const Parser = struct {
         }
 
         if (token.kind == .LeftBracket) {
-            self.index += 1;
+            self.skip(.LeftBracket);
             const node = self.compound_statement();
             self.skip(.RightBracket);
             return node;
@@ -152,7 +157,7 @@ pub const Parser = struct {
 
     pub fn expression(self: *Parser, token: Token) *Node {
         if (token.kind == .SemiColon) {
-            self.index += 1;
+            self.skip(.SemiColon);
             return Node.new_node(.STATEMENT);
         }
 
@@ -161,7 +166,7 @@ pub const Parser = struct {
 
     pub fn expr_stmt(self: *Parser, token: Token) *Node {
         if (token.kind == .SemiColon) {
-            self.index += 1;
+            self.skip(.SemiColon);
             return Node.new_node(.STATEMENT);
         }
 
@@ -174,7 +179,7 @@ pub const Parser = struct {
         var node = self.equality(token);
 
         if (self.tokens[self.index].kind == .Assign) {
-            self.index += 1;
+            self.skip(.Assign);
             node = Node.new_binary(.ASSIGN, node, self.assign(self.tokens[self.index]));
         }
 
@@ -186,13 +191,13 @@ pub const Parser = struct {
 
         while (true) {
             if (self.tokens[self.index].kind == .Eq) {
-                self.index += 1;
+                self.skip(.Eq);
                 node = Node.new_binary(.EQ, node, self.relational(self.tokens[self.index]));
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Ne) {
-                self.index += 1;
+                self.skip(.Ne);
                 node = Node.new_binary(.NE, node, self.relational(self.tokens[self.index]));
                 continue;
             }
@@ -206,25 +211,25 @@ pub const Parser = struct {
 
         while (true) {
             if (self.tokens[self.index].kind == .Lt) {
-                self.index += 1;
+                self.skip(.Lt);
                 node = Node.new_binary(.LT, node, self.add(self.tokens[self.index]));
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Le) {
-                self.index += 1;
+                self.skip(.Le);
                 node = Node.new_binary(.LE, node, self.add(self.tokens[self.index]));
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Gt) {
-                self.index += 1;
+                self.skip(.Gt);
                 node = Node.new_binary(.GT, node, self.add(self.tokens[self.index]));
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Ge) {
-                self.index += 1;
+                self.skip(.Ge);
                 node = Node.new_binary(.GE, node, self.add(self.tokens[self.index]));
                 continue;
             }
@@ -238,13 +243,13 @@ pub const Parser = struct {
 
         while (true) {
             if (self.tokens[self.index].kind == .Plus) {
-                self.index += 1;
+                self.skip(.Plus);
                 node = Node.new_binary(.ADD, node, self.mul(self.tokens[self.index]));
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Minus) {
-                self.index += 1;
+                self.skip(.Minus);
                 node = Node.new_binary(.SUB, node, self.mul(self.tokens[self.index]));
                 continue;
             }
@@ -260,13 +265,13 @@ pub const Parser = struct {
 
         while (true) {
             if (self.tokens[self.index].kind == .Mul) {
-                self.index += 1;
+                self.skip(.Mul);
                 node = Node.new_binary(.MUL, node, self.unary(self.tokens[self.index]));
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Div) {
-                self.index += 1;
+                self.skip(.Div);
                 node = Node.new_binary(.DIV, node, self.unary(self.tokens[self.index]));
                 continue;
             }
@@ -279,12 +284,12 @@ pub const Parser = struct {
 
     pub fn unary(self: *Parser, token: Token) *Node {
         if (token.kind == .Plus) {
-            self.index += 1;
+            self.skip(.Plus);
             return self.primary(self.tokens[self.index]);
         }
 
         if (token.kind == .Minus) {
-            self.index += 1;
+            self.skip(.Minus);
             return Node.new_unary(.NEG, self.unary(self.tokens[self.index]));
         }
 
@@ -293,7 +298,7 @@ pub const Parser = struct {
 
     pub fn primary(self: *Parser, token: Token) *Node {
         if (token.kind == .LeftParen) {
-            self.index += 1;
+            self.skip(.LeftParen);
             const node = self.add(self.tokens[self.index]);
             self.skip(.RightParen);
             return node;
@@ -301,7 +306,7 @@ pub const Parser = struct {
 
         if (token.kind == .Variable) {
             var object = self.find_var(token);
-            self.index += 1;
+            self.skip(.Variable);
 
             if (object) |obj| {
                 return Node.new_variable(obj);
@@ -313,23 +318,48 @@ pub const Parser = struct {
 
         if (token.kind == .Number) {
             const node = Node.new_num(stringToInt(self.source[token.start..token.end]));
-            self.index += 1;
+            self.skip(.Number);
             return node;
         }
 
         std.log.err("Found: {}", .{token.kind});
-        @panic("wrong usage of primary");
+
+        var reports = std.ArrayList(ReportItem).init(allocator);
+        reports.append(ReportItem{
+            .kind = .@"error",
+            .location = token.line,
+            .message = std.fmt.allocPrint(allocator, "Found a {}", .{token.kind}) catch @panic("failed to allocate report print"),
+        }) catch @panic("failed to allocate report");
+
+        errorManager.panic(
+            .missing_token,
+            &reports.items,
+            self.source[token.line.start..token.line.end],
+        );
     }
 
     pub fn skip(self: *Parser, op: TokenImport.Kind) void {
         const token = self.tokens[self.index];
         if (token.kind != op) {
-            std.log.err("Found: {} at {d}..{d}", .{
-                token.kind,
-                token.start,
-                token.end,
-            });
-            @panic("SKIP: found wrong operator");
+            var reports = std.ArrayList(ReportItem).init(allocator);
+
+            reports.append(ReportItem{
+                .kind = .@"error",
+                .location = token.line,
+                .message = std.fmt.allocPrint(allocator, "should be a {}", .{op}) catch @panic("failed to allocate report print"),
+            }) catch @panic("failed to allocate report");
+
+            reports.append(ReportItem{
+                .kind = .warning,
+                .location = self.tokens[self.index - 1].line,
+                .message = std.fmt.allocPrint(allocator, "expects a {} after it", .{op}) catch @panic("failed to allocate report print"),
+            }) catch @panic("failed to allocate report");
+
+            errorManager.panic(
+                .missing_token,
+                &reports.items,
+                self.source[token.line.start..token.line.end],
+            );
         }
         self.index += 1;
     }
@@ -413,7 +443,7 @@ pub const Node = struct {
         var object = allocator.create(Object) catch {
             @panic("failed to allocate object");
         };
-        // TODO: I don't like this const cast.
+
         object.name = name;
         object.offset = 1;
 
