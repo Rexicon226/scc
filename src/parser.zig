@@ -338,32 +338,22 @@ pub const Parser = struct {
             }) catch @panic("failed to allocate report");
 
             reports.append(ReportItem{
-                .kind = .@"error",
-                .location = token.line,
-                .message = "and here >:C",
+                .kind = .warning,
+                .location = self.tokens[self.index - 1].line,
+                .message = std.fmt.allocPrint(allocator, "expects a {} after it", .{op}) catch @panic("failed to allocate report print"),
             }) catch @panic("failed to allocate report");
 
             reports.append(ReportItem{
-                .kind = .@"error",
+                .kind = .hint,
                 .location = .{
-                    .start = token.line.start,
-                    .end = token.line.end,
+                    .start = token.start,
+                    .end = token.end,
                     .column = 3,
                     .line = token.line.line,
                 },
-                .message = "and here >:C",
+                .message = "some other error idk",
             }) catch @panic("failed to allocate report");
 
-            reports.append(ReportItem{
-                .kind = .@"error",
-                .location = .{
-                    .start = token.line.start,
-                    .end = token.line.end,
-                    .column = 1,
-                    .line = token.line.line,
-                },
-                .message = "here >:C",
-            }) catch @panic("failed to allocate report");
             errorManager.panic(
                 .missing_token,
                 &reports.items,

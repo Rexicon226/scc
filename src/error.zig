@@ -139,19 +139,34 @@ pub const Report = struct {
             var on: usize = 1;
             // Go through each line, printing how many brackets we need,
             // With the spacing they need.
+            // TODO: Support same column errors.
             for (items) |item| {
+                _ = item;
                 try up_dash.appendSlice("      ");
 
                 for (1..(slice.len - depth) + 1) |i| {
                     if (i == items[item_index].location.column) {
                         if (i == reverse_items[on - 1].location.column) {
-                            try up_dash.appendSlice("╰── ");
-                            try up_dash.appendSlice(item.message);
+                            const color_slice = items[item_index].kind.color();
+                            try up_dash.appendSlice(
+                                try std.fmt.allocPrint(
+                                    self.allocator,
+                                    "\x1b[{d}m╰─ {s}\x1b[0m",
+                                    .{ color_slice, items[item_index].message },
+                                ),
+                            );
                         } else {
-                            try up_dash.append('|');
+                            const color_slice = items[item_index].kind.color();
+                            try up_dash.appendSlice(
+                                try std.fmt.allocPrint(self.allocator, "\x1b[{d}m│\x1b[0m", .{color_slice}),
+                            );
                         }
 
                         item_index += 1;
+
+                        if (item_index > items.len - 1) {
+                            break;
+                        }
                     } else {
                         try up_dash.append(' ');
                     }
@@ -173,27 +188,6 @@ pub const Report = struct {
         }
     }
 };
-
-// Draw the next item, with a line connecting to the source code, at the same column.
-//  if (self.items.len > 1) {
-//             for (self.items[1..]) |item| {
-//                 const side_offset = 4 + item.location.column;
-//                 const spaces = try self.allocator.alloc(u8, side_offset);
-//                 @memset(spaces, ' ');
-//                 defer self.allocator.free(spaces);
-
-//
-
-//                 try out.print(
-//                     "{s}\x1b[{d}m╰───── {s}\x1b[0m\n",
-//                     .{
-//                         spaces,
-//                         item.kind.color(),
-//                         item.message,
-//                     },
-//                 );
-//             }
-//         }
 
 pub const ErrorManager = struct {
     source: [:0]const u8,
