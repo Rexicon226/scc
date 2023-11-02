@@ -63,10 +63,6 @@ pub const ReportItem = struct {
     message: []const u8,
 
     pub const SortContext = struct {};
-
-    pub fn lessThan(_: SortContext, lhs: ReportItem, rhs: ReportItem) bool {
-        return lhs.location.line < rhs.location.line or (lhs.location.line == rhs.location.line and lhs.location.column < rhs.location.column);
-    }
 };
 
 pub const ReportOptions = struct {
@@ -140,8 +136,7 @@ pub const Report = struct {
             // Go through each line, printing how many brackets we need,
             // With the spacing they need.
             // TODO: Support same column errors.
-            for (items) |item| {
-                _ = item;
+            for (items) |_| {
                 try up_dash.appendSlice("      ");
 
                 for (1..(slice.len - depth) + 1) |i| {
@@ -158,7 +153,11 @@ pub const Report = struct {
                         } else {
                             const color_slice = items[item_index].kind.color();
                             try up_dash.appendSlice(
-                                try std.fmt.allocPrint(self.allocator, "\x1b[{d}m│\x1b[0m", .{color_slice}),
+                                try std.fmt.allocPrint(
+                                    self.allocator,
+                                    "\x1b[{d}m│\x1b[0m",
+                                    .{color_slice},
+                                ),
                             );
                         }
 

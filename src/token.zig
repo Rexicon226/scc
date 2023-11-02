@@ -146,92 +146,102 @@ pub const Tokenizer = struct {
 
             // Keywords
             if (c == 'r') {
-                const slice = buffer[self.index + 1 .. self.index + 7];
-                if (std.mem.eql(u8, slice, "eturn ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .Return,
-                            self.index,
-                            self.index + 7,
-                            self.line,
-                            self.line.column,
-                        ),
-                    );
+                if (buffer[self.index..].len > 7) {
+                    const slice = buffer[self.index + 1 .. self.index + 7];
+                    if (std.mem.eql(u8, slice, "eturn ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .Return,
+                                self.index,
+                                self.index + 7,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.advance(7);
-                    continue;
+                        self.advance(7);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'i') {
-                const slice = buffer[self.index + 1 .. self.index + 3];
-                if (std.mem.eql(u8, slice, "f ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .If,
-                            self.index,
-                            self.index + 3,
-                            self.line,
-                            self.line.column,
-                        ),
-                    );
+                if (buffer[self.index..].len > 3) {
+                    const slice = buffer[self.index + 1 .. self.index + 3];
+                    if (std.mem.eql(u8, slice, "f ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .If,
+                                self.index,
+                                self.index + 3,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.advance(3);
-                    continue;
+                        self.advance(3);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'e') {
-                const slice = buffer[self.index + 1 .. self.index + 5];
-                if (std.mem.eql(u8, slice, "lse ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .Else,
-                            self.index,
-                            self.index + 5,
-                            self.line,
-                            self.line.column,
-                        ),
-                    );
+                if (buffer[self.index..].len > 5) {
+                    const slice = buffer[self.index + 1 .. self.index + 5];
+                    if (std.mem.eql(u8, slice, "lse ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .Else,
+                                self.index,
+                                self.index + 5,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.advance(5);
-                    continue;
+                        self.advance(5);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'f') {
-                const slice = buffer[self.index + 1 .. self.index + 4];
-                if (std.mem.eql(u8, slice, "or ")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .For,
-                            self.index,
-                            self.index + 4,
-                            self.line,
-                            self.line.column,
-                        ),
-                    );
+                if (buffer[self.index..].len > 4) {
+                    const slice = buffer[self.index + 1 .. self.index + 4];
+                    if (std.mem.eql(u8, slice, "or ")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .For,
+                                self.index,
+                                self.index + 4,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.advance(4);
-                    continue;
+                        self.advance(4);
+                        continue;
+                    }
                 }
             }
 
             if (c == 'w') {
-                const slice = buffer[self.index + 1 .. self.index + 5];
-                if (std.mem.eql(u8, slice, "hile")) {
-                    try self.tokens.append(
-                        try Token.new_token(
-                            .While,
-                            self.index,
-                            self.index + 5,
-                            self.line,
-                            self.line.column,
-                        ),
-                    );
+                if (buffer[self.index..].len > 5) {
+                    const slice = buffer[self.index + 1 .. self.index + 5];
+                    if (std.mem.eql(u8, slice, "hile")) {
+                        try self.tokens.append(
+                            try Token.new_token(
+                                .While,
+                                self.index,
+                                self.index + 5,
+                                self.line,
+                                self.line.column,
+                            ),
+                        );
 
-                    self.advance(5);
-                    continue;
+                        self.advance(5);
+                        continue;
+                    }
                 }
             }
 

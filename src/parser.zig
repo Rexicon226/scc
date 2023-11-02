@@ -323,7 +323,19 @@ pub const Parser = struct {
         }
 
         std.log.err("Found: {}", .{token.kind});
-        @panic("wrong usage of primary");
+
+        var reports = std.ArrayList(ReportItem).init(allocator);
+        reports.append(ReportItem{
+            .kind = .@"error",
+            .location = token.line,
+            .message = std.fmt.allocPrint(allocator, "Found a {}", .{token.kind}) catch @panic("failed to allocate report print"),
+        }) catch @panic("failed to allocate report");
+
+        errorManager.panic(
+            .missing_token,
+            &reports.items,
+            self.source[token.line.start..token.line.end],
+        );
     }
 
     pub fn skip(self: *Parser, op: TokenImport.Kind) void {
@@ -341,17 +353,6 @@ pub const Parser = struct {
                 .kind = .warning,
                 .location = self.tokens[self.index - 1].line,
                 .message = std.fmt.allocPrint(allocator, "expects a {} after it", .{op}) catch @panic("failed to allocate report print"),
-            }) catch @panic("failed to allocate report");
-
-            reports.append(ReportItem{
-                .kind = .hint,
-                .location = .{
-                    .start = token.start,
-                    .end = token.end,
-                    .column = 3,
-                    .line = token.line.line,
-                },
-                .message = "some other error idk",
             }) catch @panic("failed to allocate report");
 
             errorManager.panic(
