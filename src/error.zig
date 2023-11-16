@@ -119,6 +119,8 @@ pub const Report = struct {
         // Calculate stuff
         if (self.items.len > 1) {
             var up_dash = std.ArrayList(u8).init(self.allocator);
+            // defer up_dash.deinit();
+
             // Max amount it will take.
             try up_dash.ensureTotalCapacity(self.source_range.len);
 

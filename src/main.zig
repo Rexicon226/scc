@@ -1,37 +1,46 @@
 const std = @import("std");
+const tracy = @import("tracy");
+
 const ParserImport = @import("parser.zig");
 const CodeGen = @import("codegen.zig");
 const ErrorManager = @import("error.zig").ErrorManager;
 
 const builtin = @import("builtin");
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 16 }){};
 var arena = std.heap.ArenaAllocator.init(gpa.allocator());
 const allocator = arena.allocator();
 
 const MB = 1024 * 1024;
 
-const stdout = std.io.getStdOut().writer();
+const benchmark = "{ return 10; }";
 
-pub fn print(comptime source: []const u8, args: anytype) void {
-    stdout.print(source, args) catch |err| {
-        std.log.err("Unable to print: {}\n", .{err});
-        @panic("Unable to print");
-    };
+fn usage() void {
+    const stdout = std.io.getStdOut().writer();
+
+    const usage_string =
+        \\ Usage:
+        \\ scc <file> [options]
+        \\
+        \\ Options:
+        \\  --cli <code>  Run code as CLI
+        \\  --bench       Run pre-set benchmark (100% for testing purposes)
+        \\
+    ;
+    stdout.print(usage_string, .{}) catch @panic("failed to print usage");
 }
 
-// Main
-pub fn main() !void {
+pub fn main() !u8 {
+    defer _ = gpa.deinit();
+    defer arena.deinit();
+
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    ParserImport.allocator = allocator;
-
-    CodeGen.allocator = allocator;
-
     if (args.len < 2) {
-        std.log.warn("Usage: {s} <code>\n", .{args[0]});
-        return error.InvalidArguments;
+        std.log.err("Invalid arguments\n", .{});
+        usage();
+        return 1;
     }
 
     const file = args[1];
@@ -42,8 +51,23 @@ pub fn main() !void {
         const errorManager = ErrorManager.init(allocator, cli);
         ParserImport.errorManager = errorManager;
 
-        try CodeGen.parse(cli, "cli", .{ .print = true });
-        return;
+        try CodeGen.parse(
+            cli,
+            "cli",
+            .{ .print = true },
+            allocator,
+        );
+
+        return 0;
+    } else if (std.mem.eql(u8, file, "--bench")) {
+        try CodeGen.parse(
+            benchmark,
+            "bench",
+            .{ .print = true },
+            allocator,
+        );
+
+        return 0;
     }
 
     var source = try std.fs.cwd().openFile(file, .{});
@@ -58,5 +82,12 @@ pub fn main() !void {
     var outputFileName = outputFile.next().?;
     outputFileName = try std.fmt.allocPrint(allocator, "{s}.s", .{outputFileName});
 
-    try CodeGen.parse(data, outputFileName, null);
+    try CodeGen.parse(
+        data,
+        outputFileName,
+        null,
+        allocator,
+    );
+
+    return 0;
 }

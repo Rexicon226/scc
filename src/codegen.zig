@@ -9,9 +9,8 @@ const Node = ParserImport.Node;
 const Function = ParserImport.Function;
 
 pub var allocator: std.mem.Allocator = undefined;
-// pub var stdout: std.io = undefined;
-
 pub var file: std.fs.File = undefined;
+
 pub fn print(comptime format: []const u8, args: anytype) void {
     const stdout = file.writer();
     stdout.print(format, args) catch @panic("failed to write");
@@ -25,11 +24,20 @@ fn setupPrint() void {
     file = std.io.getStdOut();
 }
 
+/// Top-level options for the parser behavior
 pub const ParserOptions = struct {
+    /// If true, the parser will emit to `stdout`instead of the given file.
     print: bool = false,
 };
 
-pub fn parse(source: [:0]const u8, output_file: []const u8, options: ?ParserOptions) !void {
+pub fn parse(
+    source: [:0]const u8,
+    output_file: []const u8,
+    options: ?ParserOptions,
+    _allocator: std.mem.Allocator,
+) !void {
+    allocator = _allocator;
+
     if (options) |o| {
         if (o.print) {
             setupPrint();
@@ -45,7 +53,7 @@ pub fn parse(source: [:0]const u8, output_file: []const u8, options: ?ParserOpti
 
     const tokens = try tokenizer.tokens.toOwnedSlice();
 
-    var parser = ParserImport.Parser.init(source, tokens);
+    var parser = ParserImport.Parser.init(source, tokens, allocator);
     const function = try parser.parse();
 
     assign_lvar_offsets(function);
@@ -68,16 +76,21 @@ pub fn parse(source: [:0]const u8, output_file: []const u8, options: ?ParserOpti
     print("  mov %rbp, %rsp\n", .{});
     print("  pop %rbp\n", .{});
     print("  ret\n", .{});
+
+    // Make sure stack is empty
     std.debug.assert(depth == 0);
 }
 
+/// Stack depth
 var depth: usize = 0;
 
+/// Pushes the value of rax onto the stack
 fn push() void {
     print("  push %rax\n", .{});
     depth += 1;
 }
 
+/// Pops the value of `reg` from the stack
 fn pop(reg: []const u8) void {
     print("  pop {s}\n", .{reg});
     depth -= 1;
@@ -93,10 +106,15 @@ fn gen_addr(node: *Node) void {
     @panic("not an lvalue");
 }
 
+/// Aligns `n` to the closest (to n) multiple of `al`
+///
+/// e.g. `align_to(5, 4) == 8`
 fn align_to(n: usize, al: usize) usize {
     return (n + al - 1) / al * al;
 }
 
+/// Pre-calculates and assigns the offset of each
+/// local variable in `prog`
 fn assign_lvar_offsets(prog: *Function) void {
     var offset: isize = 0;
 
@@ -114,116 +132,135 @@ fn emit(node: *Node) void {
     // print("Node: {}\n", .{node});
 
     if (node.kind == .INVALID) {
-        return;
+        @panic("invalid node");
     }
 
-    if (node.kind == .IF) {
-        counter += 1;
-        emit(node.cond);
-        print("  cmp $0, %rax\n", .{});
-        print("  je  .L.else.{d}\n", .{counter});
-        emit(node.then);
-        print("  jmp .L.end.{d}\n", .{counter});
-        print(".L.else.{d}:\n", .{counter});
+    // Control Flow
+    {
+        switch (node.kind) {
+            .IF => {
+                counter += 1;
+                emit(node.cond);
+                print("  cmp $0, %rax\n", .{});
+                print("  je  .L.else.{d}\n", .{counter});
+                emit(node.then);
+                print("  jmp .L.end.{d}\n", .{counter});
+                print(".L.else.{d}:\n", .{counter});
 
-        if (node.hasElse) {
-            emit(node.els);
-        }
+                if (node.hasElse) {
+                    emit(node.els);
+                }
 
-        print(".L.end.{d}:\n", .{counter});
-        return;
-    }
-
-    if (node.kind == .FOR) {
-        counter += 1;
-        if (node.hasInit) emit(node.init);
-
-        print(".L.begin.{d}:\n", .{counter});
-
-        if (node.hasCond) {
-            emit(node.cond);
-            print("  cmp $0, %rax\n", .{});
-            print("  je  .L.end.{d}\n", .{counter});
-        }
-        emit(node.then);
-
-        if (node.hasInc) emit(node.inc);
-
-        print("  jmp .L.begin.{d}\n", .{counter});
-        print(".L.end.{d}:\n", .{counter});
-        return;
-    }
-
-    if (node.kind == .BLOCK) {
-        // if (node.body.len == 0) return;
-
-        for (node.body) |n| {
-            emit(n);
-        }
-        return;
-    }
-
-    if (node.kind == .RETURN) {
-        emit(node.ast.binary.lhs);
-        print("  jmp .L.return\n", .{});
-        return;
-    }
-
-    if (node.kind == .STATEMENT) {
-        switch (node.ast) {
-            .binary => |b| {
-                emit(b.lhs);
-                emit(b.rhs);
+                print(".L.end.{d}:\n", .{counter});
+                return;
             },
+
+            .FOR => {
+                counter += 1;
+                if (node.hasInit) emit(node.init);
+
+                print(".L.begin.{d}:\n", .{counter});
+
+                if (node.hasCond) {
+                    emit(node.cond);
+                    print("  cmp $0, %rax\n", .{});
+                    print("  je  .L.end.{d}\n", .{counter});
+                }
+                emit(node.then);
+
+                if (node.hasInc) emit(node.inc);
+
+                print("  jmp .L.begin.{d}\n", .{counter});
+                print(".L.end.{d}:\n", .{counter});
+                return;
+            },
+
+            .BLOCK => {
+                {
+                    if (node.body.len == 0) return;
+
+                    for (node.body) |n| {
+                        emit(n);
+                    }
+
+                    return;
+                }
+            },
+
+            .RETURN => {
+                {
+                    emit(node.ast.binary.lhs);
+                    print("  jmp .L.return\n", .{});
+                    return;
+                }
+            },
+
+            .STATEMENT => {
+                {
+                    switch (node.ast) {
+                        .binary => |b| {
+                            emit(b.lhs);
+                            emit(b.rhs);
+                        },
+                        else => {},
+                    }
+                    return;
+                }
+            },
+
             else => {},
         }
-        return;
     }
 
-    if (node.kind == .NUM) {
-        print("  mov ${d}, %rax\n", .{node.value});
+    // Variables
+    {
+        switch (node.kind) {
+            .NUM => {
+                print("  mov ${d}, %rax\n", .{node.value});
+                return;
+            },
 
-        return;
-    }
+            .VAR => {
+                gen_addr(node);
+                print("  mov (%rax), %rax\n", .{});
+                return;
+            },
 
-    if (node.kind == .VAR) {
-        gen_addr(node);
-        print("  mov (%rax), %rax\n", .{});
-        return;
-    }
+            .ASSIGN => {
+                gen_addr(node.ast.binary.lhs);
+                push();
+                emit(node.ast.binary.rhs);
+                pop("%rdi");
+                print("  mov %rax, (%rdi)\n", .{});
+                return;
+            },
 
-    if (node.kind == .ASSIGN) {
-        gen_addr(node.ast.binary.lhs);
-        push();
-        emit(node.ast.binary.rhs);
-        pop("%rdi");
-        print("  mov %rax, (%rdi)\n", .{});
-        return;
-    }
+            .DEREF => {
+                emit(node.ast.binary.lhs);
+                print("  mov (%rax), %rax\n", .{});
+                return;
+            },
 
-    if (node.kind == .NEG) {
-        emit(node.ast.binary.rhs);
-        print("  neg %rax\n", .{});
+            .ADDR => {
+                gen_addr(node.ast.binary.lhs);
+                return;
+            },
 
-        return;
+            else => {},
+        }
     }
 
     switch (node.ast) {
         .binary => {
             emit(node.ast.binary.rhs);
             push();
-        },
-        .invalid => {},
-    }
-
-    switch (node.ast) {
-        .binary => {
             emit(node.ast.binary.lhs);
             pop("%rdi");
         },
         .invalid => {},
     }
 
+    // Operations
     switch (node.kind) {
         .ADD => {
             print("  add %rdi, %rax\n", .{});
@@ -249,18 +286,14 @@ fn emit(node: *Node) void {
         .EQ, .NE, .LT, .LE, .GT, .GE => {
             print("  cmp %rdi, %rax\n", .{});
 
-            if (node.kind == .EQ) {
-                print("  sete %al\n", .{});
-            } else if (node.kind == .NE) {
-                print("  setne %al\n", .{});
-            } else if (node.kind == .LT) {
-                print("  setl %al\n", .{});
-            } else if (node.kind == .LE) {
-                print("  setle %al\n", .{});
-            } else if (node.kind == .GT) {
-                print("  setg %al\n", .{});
-            } else if (node.kind == .GE) {
-                print("  setge %al\n", .{});
+            switch (node.kind) {
+                .EQ => print("  sete %al\n", .{}),
+                .NE => print("  setne %al\n", .{}),
+                .LT => print("  setl %al\n", .{}),
+                .LE => print("  setle %al\n", .{}),
+                .GT => print("  setg %al\n", .{}),
+                .GE => print("  setge %al\n", .{}),
+                else => {},
             }
 
             print("  movzb %al, %rax\n", .{});

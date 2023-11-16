@@ -4,8 +4,6 @@ const TokenImport = @import("token.zig");
 const Token = TokenImport.Token;
 const Kind = TokenImport.Kind;
 
-pub var allocator: std.mem.Allocator = undefined;
-
 const ErrorManager = @import("error.zig").ErrorManager;
 const ReportItem = @import("error.zig").ReportItem;
 pub var errorManager: ErrorManager = undefined;
@@ -24,18 +22,29 @@ pub const Parser = struct {
 
     locals: std.ArrayList(*Object),
 
-    pub fn init(source: [:0]const u8, tokens: []Token) Parser {
+    allocator: std.mem.Allocator,
+
+    pub fn init(
+        source: [:0]const u8,
+        tokens: []Token,
+        allocator: std.mem.Allocator,
+    ) Parser {
         return Parser{
             .source = source,
             .tokens = tokens,
             .index = 0,
             .locals = std.ArrayList(*Object).init(allocator),
+            .allocator = allocator,
         };
     }
 
     pub fn find_var(self: *Parser, tok: Token) ?*Object {
         for (self.locals.items) |local| {
-            if (std.mem.eql(u8, local.name, self.source[tok.start..tok.end])) {
+            if (std.mem.eql(
+                u8,
+                local.name,
+                self.source[tok.start..tok.end],
+            )) {
                 return local;
             }
         }
@@ -43,9 +52,9 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) !*Function {
-        var function = try allocator.create(Function);
+        var function = try self.allocator.create(Function);
 
-        var statements = std.ArrayList(*Node).init(allocator);
+        var statements = std.ArrayList(*Node).init(self.allocator);
 
         // Tokens
         // for (self.tokens) |token| {
@@ -70,13 +79,19 @@ pub const Parser = struct {
     pub fn statement(self: *Parser, token: Token) *Node {
         if (token.kind == .Return) {
             self.skip(.Return);
-            const node = Node.new_unary(.RETURN, self.expression(self.tokens[self.index]));
+            const node = Node.new_unary(
+                .RETURN,
+                self.expression(
+                    self.tokens[self.index],
+                ),
+                self.allocator,
+            );
             self.skip(.SemiColon);
             return node;
         }
 
         if (token.kind == .If) {
-            const node = Node.new_node(.IF);
+            const node = Node.new_node(.IF, self.allocator);
             self.skip(.If);
 
             self.skip(.LeftParen);
@@ -92,7 +107,10 @@ pub const Parser = struct {
         }
 
         if (token.kind == .For) {
-            const node = Node.new_node(.FOR);
+            const node = Node.new_node(
+                .FOR,
+                self.allocator,
+            );
             self.skip(.For);
             self.skip(.LeftParen);
 
@@ -115,7 +133,10 @@ pub const Parser = struct {
         }
 
         if (token.kind == .While) {
-            const node = Node.new_node(.FOR);
+            const node = Node.new_node(
+                .FOR,
+                self.allocator,
+            );
             self.skip(.While);
 
             self.skip(.LeftParen);
@@ -140,17 +161,20 @@ pub const Parser = struct {
     }
 
     pub fn compound_statement(self: *Parser) *Node {
-        var body = std.ArrayList(*Node).init(allocator);
+        var body = std.ArrayListUnmanaged(*Node){};
 
         while (self.tokens[self.index].kind != .RightBracket) {
             const node = self.statement(self.tokens[self.index]);
 
-            body.append(node) catch {
+            body.append(self.allocator, node) catch {
                 @panic("failed to append node");
             };
         }
 
-        const node = Node.new_node(.BLOCK);
+        const node = Node.new_node(
+            .BLOCK,
+            self.allocator,
+        );
         node.body = body.items;
         return node;
     }
@@ -158,7 +182,10 @@ pub const Parser = struct {
     pub fn expression(self: *Parser, token: Token) *Node {
         if (token.kind == .SemiColon) {
             self.skip(.SemiColon);
-            return Node.new_node(.STATEMENT);
+            return Node.new_node(
+                .STATEMENT,
+                self.allocator,
+            );
         }
 
         return self.assign(token);
@@ -167,7 +194,10 @@ pub const Parser = struct {
     pub fn expr_stmt(self: *Parser, token: Token) *Node {
         if (token.kind == .SemiColon) {
             self.skip(.SemiColon);
-            return Node.new_node(.STATEMENT);
+            return Node.new_node(
+                .STATEMENT,
+                self.allocator,
+            );
         }
 
         const node = self.assign(token);
@@ -180,7 +210,12 @@ pub const Parser = struct {
 
         if (self.tokens[self.index].kind == .Assign) {
             self.skip(.Assign);
-            node = Node.new_binary(.ASSIGN, node, self.assign(self.tokens[self.index]));
+            node = Node.new_binary(
+                .ASSIGN,
+                node,
+                self.assign(self.tokens[self.index]),
+                self.allocator,
+            );
         }
 
         return node;
@@ -192,13 +227,23 @@ pub const Parser = struct {
         while (true) {
             if (self.tokens[self.index].kind == .Eq) {
                 self.skip(.Eq);
-                node = Node.new_binary(.EQ, node, self.relational(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .EQ,
+                    node,
+                    self.relational(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Ne) {
                 self.skip(.Ne);
-                node = Node.new_binary(.NE, node, self.relational(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .NE,
+                    node,
+                    self.relational(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
@@ -212,25 +257,45 @@ pub const Parser = struct {
         while (true) {
             if (self.tokens[self.index].kind == .Lt) {
                 self.skip(.Lt);
-                node = Node.new_binary(.LT, node, self.add(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .LT,
+                    node,
+                    self.add(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Le) {
                 self.skip(.Le);
-                node = Node.new_binary(.LE, node, self.add(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .LE,
+                    node,
+                    self.add(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Gt) {
                 self.skip(.Gt);
-                node = Node.new_binary(.GT, node, self.add(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .GT,
+                    node,
+                    self.add(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Ge) {
                 self.skip(.Ge);
-                node = Node.new_binary(.GE, node, self.add(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .GE,
+                    node,
+                    self.add(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
@@ -244,13 +309,23 @@ pub const Parser = struct {
         while (true) {
             if (self.tokens[self.index].kind == .Plus) {
                 self.skip(.Plus);
-                node = Node.new_binary(.ADD, node, self.mul(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .ADD,
+                    node,
+                    self.mul(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Minus) {
                 self.skip(.Minus);
-                node = Node.new_binary(.SUB, node, self.mul(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .SUB,
+                    node,
+                    self.mul(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
@@ -266,13 +341,23 @@ pub const Parser = struct {
         while (true) {
             if (self.tokens[self.index].kind == .Mul) {
                 self.skip(.Mul);
-                node = Node.new_binary(.MUL, node, self.unary(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .MUL,
+                    node,
+                    self.unary(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
             if (self.tokens[self.index].kind == .Div) {
                 self.skip(.Div);
-                node = Node.new_binary(.DIV, node, self.unary(self.tokens[self.index]));
+                node = Node.new_binary(
+                    .DIV,
+                    node,
+                    self.unary(self.tokens[self.index]),
+                    self.allocator,
+                );
                 continue;
             }
 
@@ -285,12 +370,35 @@ pub const Parser = struct {
     pub fn unary(self: *Parser, token: Token) *Node {
         if (token.kind == .Plus) {
             self.skip(.Plus);
-            return self.primary(self.tokens[self.index]);
+            return self.unary(self.tokens[self.index]);
         }
 
         if (token.kind == .Minus) {
             self.skip(.Minus);
-            return Node.new_unary(.NEG, self.unary(self.tokens[self.index]));
+            return Node.new_unary(
+                .NEG,
+                self.unary(self.tokens[self.index]),
+                self.allocator,
+            );
+        }
+
+        // Pointers
+        if (token.kind == .Address) {
+            self.skip(.Address);
+            return Node.new_unary(
+                .ADDR,
+                self.unary(self.tokens[self.index]),
+                self.allocator,
+            );
+        }
+
+        if (token.kind == .Mul) {
+            self.skip(.Mul);
+            return Node.new_unary(
+                .DEREF,
+                self.unary(self.tokens[self.index]),
+                self.allocator,
+            );
         }
 
         return self.primary(token);
@@ -309,26 +417,40 @@ pub const Parser = struct {
             self.skip(.Variable);
 
             if (object) |obj| {
-                return Node.new_variable(obj);
+                return Node.new_variable(
+                    obj,
+                    self.allocator,
+                );
             } else {
-                const obj = Node.new_lvar(&self.locals, self.source[token.start..token.end]);
-                return Node.new_variable(obj);
+                const obj = Node.new_lvar(
+                    &self.locals,
+                    self.source[token.start..token.end],
+                    self.allocator,
+                );
+                return Node.new_variable(
+                    obj,
+                    self.allocator,
+                );
             }
         }
 
         if (token.kind == .Number) {
-            const node = Node.new_num(stringToInt(self.source[token.start..token.end]));
+            const node = Node.new_num(
+                stringToInt(self.source[token.start..token.end]),
+                self.allocator,
+            );
             self.skip(.Number);
             return node;
         }
 
         std.log.err("Found: {}", .{token.kind});
 
-        var reports = std.ArrayList(ReportItem).init(allocator);
+        var reports = std.ArrayList(ReportItem).init(self.allocator);
+
         reports.append(ReportItem{
             .kind = .@"error",
             .location = token.line,
-            .message = std.fmt.allocPrint(allocator, "Found a {}", .{token.kind}) catch @panic("failed to allocate report print"),
+            .message = std.fmt.allocPrint(self.allocator, "Found a {}", .{token.kind}) catch @panic("failed to allocate report print"),
         }) catch @panic("failed to allocate report");
 
         errorManager.panic(
@@ -341,18 +463,18 @@ pub const Parser = struct {
     pub fn skip(self: *Parser, op: TokenImport.Kind) void {
         const token = self.tokens[self.index];
         if (token.kind != op) {
-            var reports = std.ArrayList(ReportItem).init(allocator);
+            var reports = std.ArrayList(ReportItem).init(self.allocator);
 
             reports.append(ReportItem{
                 .kind = .@"error",
                 .location = token.line,
-                .message = std.fmt.allocPrint(allocator, "should be a {}", .{op}) catch @panic("failed to allocate report print"),
+                .message = std.fmt.allocPrint(self.allocator, "should be a {}", .{op}) catch @panic("failed to allocate report print"),
             }) catch @panic("failed to allocate report");
 
             reports.append(ReportItem{
                 .kind = .warning,
                 .location = self.tokens[self.index - 1].line,
-                .message = std.fmt.allocPrint(allocator, "expects a {} after it", .{op}) catch @panic("failed to allocate report print"),
+                .message = std.fmt.allocPrint(self.allocator, "expects a {} after it", .{op}) catch @panic("failed to allocate report print"),
             }) catch @panic("failed to allocate report");
 
             errorManager.panic(
@@ -388,9 +510,12 @@ pub const Node = struct {
     inc: *Node,
     hasInc: bool = false,
 
-    pub fn new_node(kind: NodeKind) *Node {
+    pub fn new_node(
+        kind: NodeKind,
+        allocator: std.mem.Allocator,
+    ) *Node {
         const node = allocator.create(Node) catch {
-            @panic("failed to allocate node");
+            @panic("failed to allocate node {}" ++ @typeName(@TypeOf(kind)));
         };
         node.kind = kind;
 
@@ -399,8 +524,11 @@ pub const Node = struct {
         return node;
     }
 
-    pub fn new_num(num: usize) *Node {
-        const node = new_node(.NUM);
+    pub fn new_num(
+        num: usize,
+        allocator: std.mem.Allocator,
+    ) *Node {
+        const node = new_node(.NUM, allocator);
         node.value = num;
 
         node.ast = .invalid;
@@ -408,8 +536,13 @@ pub const Node = struct {
         return node;
     }
 
-    pub fn new_binary(kind: NodeKind, lhs: *Node, rhs: *Node) *Node {
-        const node = new_node(kind);
+    pub fn new_binary(
+        kind: NodeKind,
+        lhs: *Node,
+        rhs: *Node,
+        allocator: std.mem.Allocator,
+    ) *Node {
+        const node = new_node(kind, allocator);
 
         node.ast = Ast.new(.binary, .{
             .lhs = lhs,
@@ -419,8 +552,13 @@ pub const Node = struct {
         return node;
     }
 
-    pub fn new_unary(kind: NodeKind, lhs: *Node) *Node {
-        const node = new_node(kind);
+    /// Will not eat the semicolon
+    pub fn new_unary(
+        kind: NodeKind,
+        lhs: *Node,
+        allocator: std.mem.Allocator,
+    ) *Node {
+        const node = new_node(kind, allocator);
 
         node.ast = Ast.new(.binary, .{
             .lhs = lhs,
@@ -430,8 +568,11 @@ pub const Node = struct {
         return node;
     }
 
-    pub fn new_variable(variable: *Object) *Node {
-        const node = new_node(.VAR);
+    pub fn new_variable(
+        variable: *Object,
+        allocator: std.mem.Allocator,
+    ) *Node {
+        const node = new_node(.VAR, allocator);
         node.variable = variable;
 
         node.ast = .invalid;
@@ -439,7 +580,11 @@ pub const Node = struct {
         return node;
     }
 
-    pub fn new_lvar(locals: *std.ArrayList(*Object), name: []const u8) *Object {
+    pub fn new_lvar(
+        locals: *std.ArrayList(*Object),
+        name: []const u8,
+        allocator: std.mem.Allocator,
+    ) *Object {
         var object = allocator.create(Object) catch {
             @panic("failed to allocate object");
         };
@@ -466,6 +611,10 @@ pub const NodeKind = enum {
     NUM,
     VAR,
     ASSIGN,
+
+    // Pointer
+    DEREF,
+    ADDR,
 
     // Keywords
     RETURN,

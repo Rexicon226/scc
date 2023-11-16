@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
+    const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
         .name = "scc",
@@ -10,6 +10,13 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+
+    // Flags
+    const exe_options = b.addOptions();
+    exe.addOptions("build_options", exe_options);
+
+    // TODO: Causes segfault when linked
+    // exe.linkLibC();
 
     b.installArtifact(exe);
     const run_cmd = b.addRunArtifact(exe);
