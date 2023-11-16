@@ -4,7 +4,7 @@ assert() {
   input="$2"
 
   ./zig-out/bin/scc --cli "$input" > tmp.s || exit
-  zigcc -Wno-unused-command-line-argument -static -z noexecstack -o tmp tmp.s
+  zig cc -Wno-unused-command-line-argument -static -z noexecstack -o tmp tmp.s
   ./tmp
   actual="$?"
 
