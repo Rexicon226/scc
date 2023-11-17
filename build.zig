@@ -18,6 +18,9 @@ pub fn build(b: *std.Build) !void {
     // TODO: Causes segfault when linked
     // exe.linkLibC();
 
+    // exe.use_lld = false;
+    // exe.use_llvm = false;
+
     b.installArtifact(exe);
     const run_cmd = b.addRunArtifact(exe);
 

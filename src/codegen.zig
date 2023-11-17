@@ -2,28 +2,20 @@ const std = @import("std");
 const TokenImport = @import("token.zig");
 const ParserImport = @import("parser.zig");
 
+const Writer = @import("io.zig").Writer;
+
 const Token = TokenImport.Token;
+const Tokenizer = TokenImport.Tokenizer;
 const Kind = TokenImport.Kind;
 
 const Node = ParserImport.Node;
 const Function = ParserImport.Function;
+const Parser = ParserImport.Parser;
 
-pub var allocator: std.mem.Allocator = undefined;
-pub var file: std.fs.File = undefined;
+var allocator: std.mem.Allocator = undefined;
+var writer: Writer = undefined;
 
-pub fn print(comptime format: []const u8, args: anytype) void {
-    const stdout = file.writer();
-    stdout.print(format, args) catch @panic("failed to write");
-}
-
-fn setupOutputFile(output_file: []const u8) !void {
-    file = try std.fs.cwd().createFile(output_file, .{});
-}
-
-fn setupPrint() void {
-    file = std.io.getStdOut();
-}
-
+/// Writes the buffer to the output (file/stdout)
 /// Top-level options for the parser behavior
 pub const ParserOptions = struct {
     /// If true, the parser will emit to `stdout`instead of the given file.
@@ -36,49 +28,54 @@ pub fn parse(
     options: ?ParserOptions,
     _allocator: std.mem.Allocator,
 ) !void {
-    allocator = _allocator;
+    // Setup
+    {
+        allocator = _allocator;
 
-    if (options) |o| {
-        if (o.print) {
-            setupPrint();
-        }
-    } else {
-        try setupOutputFile(output_file);
+        const _writer = try Writer.init(allocator, .{
+            .file = if (options) |o| if (!o.print) output_file else null else output_file,
+        });
+        writer = _writer;
     }
 
-    var tokenizer = TokenImport.Tokenizer.init(source, allocator);
-    try tokenizer.tokens.ensureTotalCapacity(source.len);
-
+    var tokenizer = try Tokenizer.init(source, allocator);
     try tokenizer.generate();
-
     const tokens = try tokenizer.tokens.toOwnedSlice();
 
-    var parser = ParserImport.Parser.init(source, tokens, allocator);
+    var parser = Parser.init(source, tokens, allocator);
     const function = try parser.parse();
 
+    // Pre-calculate the offsets we need
     assign_lvar_offsets(function);
 
-    print("  .globl main\n", .{});
-    print("main:\n", .{});
+    // Entry point
+    writer.print("  .globl main\n");
+    writer.print("main:\n");
 
-    print("  push %rbp\n", .{});
-    print("  mov %rsp, %rbp\n", .{});
-    print("  sub ${d}, %rsp\n", .{function.stack_size});
+    // Prologue
+    writer.print("  push %rbp\n");
+    writer.print("  mov %rsp, %rbp\n");
+    writer.printArg("  sub ${d}, %rsp\n", .{function.stack_size});
 
+    // Emit code
     for (function.body) |node| {
         emit(node);
     }
 
-    print(".L.return:\n", .{});
+    // Epilogue
+    writer.print(".L.return:\n");
 
     // TODO: This can be omitted in certian cases
     // unknown yet which specific cases
-    print("  mov %rbp, %rsp\n", .{});
-    print("  pop %rbp\n", .{});
-    print("  ret\n", .{});
+    writer.print("  mov %rbp, %rsp\n");
+    writer.print("  pop %rbp\n");
+    writer.print("  ret\n");
 
     // Make sure stack is empty
     std.debug.assert(depth == 0);
+
+    // Output
+    try writer.output();
 }
 
 /// Stack depth
@@ -86,19 +83,19 @@ var depth: usize = 0;
 
 /// Pushes the value of rax onto the stack
 fn push() void {
-    print("  push %rax\n", .{});
+    writer.print("  push %rax\n");
     depth += 1;
 }
 
 /// Pops the value of `reg` from the stack
 fn pop(reg: []const u8) void {
-    print("  pop {s}\n", .{reg});
+    writer.printArg("  pop {s}\n", .{reg});
     depth -= 1;
 }
 
 fn gen_addr(node: *Node) void {
     if (node.kind == .VAR) {
-        print("  lea {d}(%rbp), %rax\n", .{node.variable.offset});
+        writer.printArg("  lea {d}(%rbp), %rax\n", .{node.variable.offset});
         return;
     }
 
@@ -129,7 +126,7 @@ fn assign_lvar_offsets(prog: *Function) void {
 var counter: usize = 0;
 
 fn emit(node: *Node) void {
-    // print("Node: {}\n", .{node});
+    // writer.print("Node: {}\n", .{node});
 
     if (node.kind == .INVALID) {
         @panic("invalid node");
@@ -141,17 +138,17 @@ fn emit(node: *Node) void {
             .IF => {
                 counter += 1;
                 emit(node.cond);
-                print("  cmp $0, %rax\n", .{});
-                print("  je  .L.else.{d}\n", .{counter});
+                writer.print("  cmp $0, %rax\n");
+                writer.printArg("  je  .L.else.{d}\n", .{counter});
                 emit(node.then);
-                print("  jmp .L.end.{d}\n", .{counter});
-                print(".L.else.{d}:\n", .{counter});
+                writer.printArg("  jmp .L.end.{d}\n", .{counter});
+                writer.printArg(".L.else.{d}:\n", .{counter});
 
                 if (node.hasElse) {
                     emit(node.els);
                 }
 
-                print(".L.end.{d}:\n", .{counter});
+                writer.printArg(".L.end.{d}:\n", .{counter});
                 return;
             },
 
@@ -159,19 +156,19 @@ fn emit(node: *Node) void {
                 counter += 1;
                 if (node.hasInit) emit(node.init);
 
-                print(".L.begin.{d}:\n", .{counter});
+                writer.printArg(".L.begin.{d}:\n", .{counter});
 
                 if (node.hasCond) {
                     emit(node.cond);
-                    print("  cmp $0, %rax\n", .{});
-                    print("  je  .L.end.{d}\n", .{counter});
+                    writer.print("  cmp $0, %rax\n");
+                    writer.printArg("  je  .L.end.{d}\n", .{counter});
                 }
                 emit(node.then);
 
                 if (node.hasInc) emit(node.inc);
 
-                print("  jmp .L.begin.{d}\n", .{counter});
-                print(".L.end.{d}:\n", .{counter});
+                writer.printArg("  jmp .L.begin.{d}\n", .{counter});
+                writer.printArg(".L.end.{d}:\n", .{counter});
                 return;
             },
 
@@ -190,7 +187,7 @@ fn emit(node: *Node) void {
             .RETURN => {
                 {
                     emit(node.ast.binary.lhs);
-                    print("  jmp .L.return\n", .{});
+                    writer.print("  jmp .L.return\n");
                     return;
                 }
             },
@@ -216,13 +213,13 @@ fn emit(node: *Node) void {
     {
         switch (node.kind) {
             .NUM => {
-                print("  mov ${d}, %rax\n", .{node.value});
+                writer.printArg("  mov ${d}, %rax\n", .{node.value});
                 return;
             },
 
             .VAR => {
                 gen_addr(node);
-                print("  mov (%rax), %rax\n", .{});
+                writer.print("  mov (%rax), %rax\n");
                 return;
             },
 
@@ -231,13 +228,13 @@ fn emit(node: *Node) void {
                 push();
                 emit(node.ast.binary.rhs);
                 pop("%rdi");
-                print("  mov %rax, (%rdi)\n", .{});
+                writer.print("  mov %rax, (%rdi)\n");
                 return;
             },
 
             .DEREF => {
                 emit(node.ast.binary.lhs);
-                print("  mov (%rax), %rax\n", .{});
+                writer.print("  mov (%rax), %rax\n");
                 return;
             },
 
@@ -263,40 +260,40 @@ fn emit(node: *Node) void {
     // Operations
     switch (node.kind) {
         .ADD => {
-            print("  add %rdi, %rax\n", .{});
+            writer.print("  add %rdi, %rax\n");
         },
 
         .SUB => {
-            print("  sub %rdi, %rax\n", .{});
+            writer.print("  sub %rdi, %rax\n");
         },
 
         .MUL => {
-            print("  imul %rdi, %rax\n", .{});
+            writer.print("  imul %rdi, %rax\n");
         },
 
         .DIV => {
-            print("  cqo\n", .{});
-            print("  idiv %rdi\n", .{});
+            writer.print("  cqo\n");
+            writer.print("  idiv %rdi\n");
         },
 
         .NEG => {
-            print("  neg %rax\n", .{});
+            writer.print("  neg %rax\n");
         },
 
         .EQ, .NE, .LT, .LE, .GT, .GE => {
-            print("  cmp %rdi, %rax\n", .{});
+            writer.print("  cmp %rdi, %rax\n");
 
             switch (node.kind) {
-                .EQ => print("  sete %al\n", .{}),
-                .NE => print("  setne %al\n", .{}),
-                .LT => print("  setl %al\n", .{}),
-                .LE => print("  setle %al\n", .{}),
-                .GT => print("  setg %al\n", .{}),
-                .GE => print("  setge %al\n", .{}),
+                .EQ => writer.print("  sete %al\n"),
+                .NE => writer.print("  setne %al\n"),
+                .LT => writer.print("  setl %al\n"),
+                .LE => writer.print("  setle %al\n"),
+                .GT => writer.print("  setg %al\n"),
+                .GE => writer.print("  setge %al\n"),
                 else => {},
             }
 
-            print("  movzb %al, %rax\n", .{});
+            writer.print("  movzb %al, %rax\n");
         },
 
         else => {

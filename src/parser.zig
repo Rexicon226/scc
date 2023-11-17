@@ -6,12 +6,11 @@ const Kind = TokenImport.Kind;
 
 const ErrorManager = @import("error.zig").ErrorManager;
 const ReportItem = @import("error.zig").ReportItem;
-pub var errorManager: ErrorManager = undefined;
 
 pub fn stringToInt(source: []const u8) usize {
     return std.fmt.parseInt(usize, source, 10) catch {
         std.log.err("Failed to parse int: {s}\n", .{source});
-        @panic("failed to parse int");
+        std.os.exit(1);
     };
 }
 
@@ -23,6 +22,7 @@ pub const Parser = struct {
     locals: std.ArrayList(*Object),
 
     allocator: std.mem.Allocator,
+    errorManager: ErrorManager,
 
     pub fn init(
         source: [:0]const u8,
@@ -35,6 +35,7 @@ pub const Parser = struct {
             .index = 0,
             .locals = std.ArrayList(*Object).init(allocator),
             .allocator = allocator,
+            .errorManager = ErrorManager.init(allocator, source),
         };
     }
 
@@ -138,7 +139,6 @@ pub const Parser = struct {
                 self.allocator,
             );
             self.skip(.While);
-
             self.skip(.LeftParen);
 
             node.cond = self.expression(self.tokens[self.index]);
@@ -169,6 +169,23 @@ pub const Parser = struct {
             body.append(self.allocator, node) catch {
                 @panic("failed to append node");
             };
+
+            if (self.index >= self.tokens.len) {
+                const token = self.tokens[self.index - 1];
+                var reports = std.ArrayList(ReportItem).init(self.allocator);
+
+                reports.append(ReportItem{
+                    .kind = .warning,
+                    .location = self.tokens[self.index - 1].line,
+                    .message = "no bracket at end of file",
+                }) catch @panic("failed to allocate report");
+
+                self.errorManager.panic(
+                    .no_end,
+                    &reports.items,
+                    self.source[token.line.start..token.line.end],
+                );
+            }
         }
 
         const node = Node.new_node(
@@ -453,7 +470,7 @@ pub const Parser = struct {
             .message = std.fmt.allocPrint(self.allocator, "Found a {}", .{token.kind}) catch @panic("failed to allocate report print"),
         }) catch @panic("failed to allocate report");
 
-        errorManager.panic(
+        self.errorManager.panic(
             .missing_token,
             &reports.items,
             self.source[token.line.start..token.line.end],
@@ -477,7 +494,7 @@ pub const Parser = struct {
                 .message = std.fmt.allocPrint(self.allocator, "expects a {} after it", .{op}) catch @panic("failed to allocate report print"),
             }) catch @panic("failed to allocate report");
 
-            errorManager.panic(
+            self.errorManager.panic(
                 .missing_token,
                 &reports.items,
                 self.source[token.line.start..token.line.end],

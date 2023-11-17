@@ -102,10 +102,14 @@ pub const Tokenizer = struct {
 
     line: Line = .{ .start = 0, .end = 0, .line = 1, .column = 1 },
 
-    pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) Tokenizer {
+    pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) !Tokenizer {
         return Tokenizer{
             .buffer = source,
-            .tokens = std.ArrayList(Token).init(allocator),
+            .tokens = blk: {
+                var tokens = std.ArrayList(Token).init(allocator);
+                try tokens.ensureTotalCapacity(source.len); // I mean, in theory every character could be a token
+                break :blk tokens;
+            },
             .allocator = allocator,
         };
     }

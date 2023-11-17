@@ -17,6 +17,7 @@ const assert = std.debug.assert;
 
 pub const Error = enum(u8) {
     missing_token = 0,
+    no_end = 1,
 };
 
 pub const ReportKind = enum {
