@@ -15,11 +15,15 @@ fn usage() void {
     const stdout = std.io.getStdOut().writer();
 
     const usage_string =
+        \\ 
         \\ Usage:
         \\ scc <file> [options]
         \\
         \\ Options:
-        \\  --cli <code>  Run code as CLI
+        \\  --cli <code> [options]  Run code as CLI
+        \\               Cli Options:
+        \\               --ast         Print AST
+        \\
         \\  --bench       Run pre-set benchmark (only for testing purposes)
         \\  --help, -h    Print this message
         \\
@@ -41,14 +45,23 @@ pub fn main() !u8 {
     }
 
     const file = args[1];
+    var options: CodeGen.ParserOptions = .{};
 
     if (std.mem.eql(u8, file, "--cli")) {
         const cli = args[2];
 
+        options.print = true;
+
+        if (args.len > 3) {
+            if (std.mem.eql(u8, args[3], "--ast")) {
+                options.printAst = true;
+            }
+        }
+
         try CodeGen.parse(
             cli,
             "",
-            .{ .print = true },
+            options,
             allocator,
         );
 

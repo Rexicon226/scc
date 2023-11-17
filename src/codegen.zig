@@ -2,7 +2,9 @@ const std = @import("std");
 const TokenImport = @import("token.zig");
 const ParserImport = @import("parser.zig");
 
-const Writer = @import("io.zig").Writer;
+const Writer = @import("util/io.zig").Writer;
+
+const AstPrinter = @import("util/ast_printer.zig").Printer;
 
 const Token = TokenImport.Token;
 const Tokenizer = TokenImport.Tokenizer;
@@ -15,11 +17,13 @@ const Parser = ParserImport.Parser;
 var allocator: std.mem.Allocator = undefined;
 var writer: Writer = undefined;
 
-/// Writes the buffer to the output (file/stdout)
 /// Top-level options for the parser behavior
 pub const ParserOptions = struct {
     /// If true, the parser will emit to `stdout`instead of the given file.
     print: bool = false,
+
+    /// A debug mode, that will print the ast tree before emitting code.
+    printAst: bool = false,
 };
 
 pub fn parse(
@@ -28,6 +32,9 @@ pub fn parse(
     options: ?ParserOptions,
     _allocator: std.mem.Allocator,
 ) !void {
+    var printAst: bool = false;
+    if (options) |o| printAst = o.printAst;
+
     // Setup
     {
         allocator = _allocator;
@@ -45,11 +52,16 @@ pub fn parse(
     var parser = Parser.init(source, tokens, allocator);
     const function = try parser.parse();
 
+    if (printAst) {
+        var ast_printer = AstPrinter.init(allocator);
+        try ast_printer.print(function.body);
+    }
+
     // Pre-calculate the offsets we need
     assign_lvar_offsets(function);
 
     // Entry point
-    writer.print("  .globl main\n");
+    writer.print("\n  .globl main\n");
     writer.print("main:\n");
 
     // Prologue
