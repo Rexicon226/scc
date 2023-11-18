@@ -119,7 +119,8 @@ pub const Tokenizer = struct {
             .buffer = source,
             .tokens = blk: {
                 var tokens = std.ArrayList(Token).init(allocator);
-                try tokens.ensureTotalCapacity(source.len); // I mean, in theory every character could be a token
+                // I mean, in theory every character could be a token
+                try tokens.ensureTotalCapacity(source.len);
                 break :blk tokens;
             },
             .allocator = allocator,

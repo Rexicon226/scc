@@ -62,6 +62,7 @@ pub const Parser = struct {
                 return local;
             }
         }
+
         return null;
     }
 
@@ -176,7 +177,7 @@ pub const Parser = struct {
             return node;
         }
 
-        return self.expression(token);
+        return self.expr_stmt(token);
     }
 
     pub fn compound_statement(self: *Parser) *Node {
@@ -214,19 +215,12 @@ pub const Parser = struct {
             self.allocator,
         );
         node.body = body.items;
+        node.hasBody = true;
         return node;
     }
 
     pub fn expression(self: *Parser, token: Token) *Node {
         handler();
-
-        if (token.kind == .SemiColon) {
-            self.skip(.SemiColon);
-            return Node.new_node(
-                .STATEMENT,
-                self.allocator,
-            );
-        }
 
         return self.assign(token);
     }
@@ -237,12 +231,12 @@ pub const Parser = struct {
         if (token.kind == .SemiColon) {
             self.skip(.SemiColon);
             return Node.new_node(
-                .STATEMENT,
+                .BLOCK,
                 self.allocator,
             );
         }
 
-        const node = self.assign(token);
+        const node = Node.new_unary(.STATEMENT, self.expression(token), self.allocator);
         self.skip(.SemiColon);
         return node;
     }
@@ -549,6 +543,8 @@ pub const Node = struct {
     kind: NodeKind,
     ast: Ast,
 
+    // program
+    hasBody: bool = false,
     body: []*Node,
 
     variable: *Object,
@@ -659,10 +655,9 @@ pub const Node = struct {
         };
 
         object.name = name;
-        object.offset = 1;
 
-        locals.append(object) catch {
-            @panic("failed to append object");
+        locals.insert(0, object) catch {
+            @panic("failed to append to locals");
         };
 
         return object;

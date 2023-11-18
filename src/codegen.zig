@@ -81,9 +81,7 @@ pub fn parse(
     writer.printArg("  sub ${d}, %rsp\n", .{function.stack_size});
 
     // Emit code
-    for (function.body) |node| {
-        emit(node);
-    }
+    statement(function.body[0]);
 
     // Epilogue
     writer.print(".L.return:\n");
@@ -117,13 +115,22 @@ fn pop(reg: []const u8) void {
 }
 
 fn gen_addr(node: *Node) void {
-    if (node.kind == .VAR) {
-        writer.printArg("  lea {d}(%rbp), %rax\n", .{node.variable.offset});
-        return;
-    }
+    switch (node.kind) {
+        .VAR => {
+            writer.printArg("  lea {d}(%rbp), %rax\n", .{node.variable.offset});
+            return;
+        },
 
-    std.log.err("found: {}\n", .{node});
-    @panic("not an lvalue");
+        .DEREF => {
+            expression(node.ast.binary.lhs);
+            return;
+        },
+
+        else => {
+            std.log.err("found: {}\n", .{node});
+            @panic("not an lvalue");
+        },
+    }
 }
 
 /// Aligns `n` to the closest (to n) multiple of `al`
@@ -138,9 +145,9 @@ fn align_to(n: usize, al: usize) usize {
 fn assign_lvar_offsets(prog: *Function) void {
     var offset: isize = 0;
 
-    for (prog.locals) |*local| {
+    for (prog.locals) |local| {
         offset += 8;
-        local.*.offset = -offset;
+        local.offset = -offset;
     }
 
     prog.stack_size = align_to(@intCast(offset), 16);
@@ -148,137 +155,51 @@ fn assign_lvar_offsets(prog: *Function) void {
 
 var counter: usize = 0;
 
-fn emit(node: *Node) void {
-    // writer.print("Node: {}\n", .{node});
-
-    if (node.kind == .INVALID) {
-        @panic("invalid node");
-    }
-
-    // Control Flow
-    {
-        switch (node.kind) {
-            .IF => {
-                counter += 1;
-                emit(node.cond);
-                writer.print("  cmp $0, %rax\n");
-                writer.printArg("  je  .L.else.{d}\n", .{counter});
-                emit(node.then);
-                writer.printArg("  jmp .L.end.{d}\n", .{counter});
-                writer.printArg(".L.else.{d}:\n", .{counter});
-
-                if (node.hasElse) {
-                    emit(node.els);
-                }
-
-                writer.printArg(".L.end.{d}:\n", .{counter});
-                return;
-            },
-
-            .FOR => {
-                counter += 1;
-                if (node.hasInit) emit(node.init);
-
-                writer.printArg(".L.begin.{d}:\n", .{counter});
-
-                if (node.hasCond) {
-                    emit(node.cond);
-                    writer.print("  cmp $0, %rax\n");
-                    writer.printArg("  je  .L.end.{d}\n", .{counter});
-                }
-                emit(node.then);
-
-                if (node.hasInc) emit(node.inc);
-
-                writer.printArg("  jmp .L.begin.{d}\n", .{counter});
-                writer.printArg(".L.end.{d}:\n", .{counter});
-                return;
-            },
-
-            .BLOCK => {
-                {
-                    if (node.body.len == 0) return;
-
-                    for (node.body) |n| {
-                        emit(n);
-                    }
-
-                    return;
-                }
-            },
-
-            .RETURN => {
-                {
-                    emit(node.ast.binary.lhs);
-                    writer.print("  jmp .L.return\n");
-                    return;
-                }
-            },
-
-            .STATEMENT => {
-                {
-                    switch (node.ast) {
-                        .binary => |b| {
-                            emit(b.lhs);
-                            emit(b.rhs);
-                        },
-                        else => {},
-                    }
-                    return;
-                }
-            },
-
-            else => {},
-        }
-    }
-
-    // Variables
-    {
-        switch (node.kind) {
-            .NUM => {
-                writer.printArg("  mov ${d}, %rax\n", .{node.value});
-                return;
-            },
-
-            .VAR => {
-                gen_addr(node);
-                writer.print("  mov (%rax), %rax\n");
-                return;
-            },
-
-            .ASSIGN => {
-                gen_addr(node.ast.binary.lhs);
-                push();
-                emit(node.ast.binary.rhs);
-                pop("%rdi");
-                writer.print("  mov %rax, (%rdi)\n");
-                return;
-            },
-
-            .DEREF => {
-                emit(node.ast.binary.lhs);
-                writer.print("  mov (%rax), %rax\n");
-                return;
-            },
-
-            .ADDR => {
-                gen_addr(node.ast.binary.lhs);
-                return;
-            },
-
-            else => {},
-        }
-    }
-
-    switch (node.ast) {
-        .binary => {
-            emit(node.ast.binary.rhs);
-            push();
-            emit(node.ast.binary.lhs);
-            pop("%rdi");
+fn expression(node: *Node) void {
+    switch (node.kind) {
+        .NUM => {
+            writer.printArg("  mov ${d}, %rax\n", .{node.value});
+            return;
         },
-        .invalid => {},
+
+        .NEG => {
+            expression(node.ast.binary.lhs);
+            writer.print("  neg %rax\n");
+            return;
+        },
+
+        .VAR => {
+            gen_addr(node);
+            writer.print("  mov (%rax), %rax\n");
+            return;
+        },
+
+        .DEREF => {
+            expression(node.ast.binary.lhs);
+            writer.print("  mov (%rax), %rax\n");
+            return;
+        },
+
+        .ADDR => {
+            gen_addr(node.ast.binary.lhs);
+            return;
+        },
+
+        .ASSIGN => {
+            gen_addr(node.ast.binary.lhs);
+            push();
+            expression(node.ast.binary.rhs);
+            pop("%rdi");
+            writer.print("  mov %rax, (%rdi)\n");
+            return;
+        },
+        else => {},
     }
+
+    expression(node.ast.binary.rhs);
+    push();
+    expression(node.ast.binary.lhs);
+    pop("%rdi");
 
     // Operations
     switch (node.kind) {
@@ -299,10 +220,6 @@ fn emit(node: *Node) void {
             writer.print("  idiv %rdi\n");
         },
 
-        .NEG => {
-            writer.print("  neg %rax\n");
-        },
-
         .EQ, .NE, .LT, .LE, .GT, .GE => {
             writer.print("  cmp %rdi, %rax\n");
 
@@ -321,7 +238,74 @@ fn emit(node: *Node) void {
 
         else => {
             std.log.err("found: {}\n", .{node});
-            @panic("uh oh");
+            @panic("invalid token passed into expression gen");
+        },
+    }
+}
+
+fn statement(node: *Node) void {
+    switch (node.kind) {
+        .IF => {
+            counter += 1;
+            expression(node.cond);
+            writer.print("  cmp $0, %rax\n");
+            writer.printArg("  je  .L.else.{d}\n", .{counter});
+            statement(node.then);
+            writer.printArg("  jmp .L.end.{d}\n", .{counter});
+            writer.printArg(".L.else.{d}:\n", .{counter});
+
+            if (node.hasElse) {
+                statement(node.els);
+            }
+
+            writer.printArg(".L.end.{d}:\n", .{counter});
+            return;
+        },
+
+        .FOR => {
+            counter += 1;
+            if (node.hasInit) statement(node.init);
+
+            writer.printArg(".L.begin.{d}:\n", .{counter});
+
+            if (node.hasCond) {
+                expression(node.cond);
+                writer.print("  cmp $0, %rax\n");
+                writer.printArg("  je  .L.end.{d}\n", .{counter});
+            }
+            statement(node.then);
+
+            if (node.hasInc) expression(node.inc);
+
+            writer.printArg("  jmp .L.begin.{d}\n", .{counter});
+            writer.printArg(".L.end.{d}:\n", .{counter});
+            return;
+        },
+
+        .BLOCK => {
+            if (!node.hasBody) return;
+
+            for (node.body) |n| {
+                statement(n);
+            }
+
+            return;
+        },
+
+        .RETURN => {
+            expression(node.ast.binary.lhs);
+            writer.print("  jmp .L.return\n");
+            return;
+        },
+
+        .STATEMENT => {
+            expression(node.ast.binary.lhs);
+            return;
+        },
+
+        else => {
+            std.log.err("found: {}\n", .{node});
+            @panic("invalid token passed into statement gen");
         },
     }
 }
