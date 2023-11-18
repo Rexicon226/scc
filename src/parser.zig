@@ -512,7 +512,6 @@ pub const Node = struct {
 
     variable: *Object,
     value: usize,
-    name: u8,
 
     // if
     cond: *Node,

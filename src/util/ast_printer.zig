@@ -12,6 +12,8 @@ pub const Printer = struct {
     /// The allocator used to allocate memory for the printer.
     allocator: std.mem.Allocator,
 
+    const spaces_per_indent = 4;
+
     pub fn init(allocator: std.mem.Allocator) Printer {
         return .{
             .allocator = allocator,
@@ -34,11 +36,12 @@ pub const Printer = struct {
         @memset(index_string, ' ');
 
         switch (node_kind) {
+            // Special
             .BLOCK => {
                 try stdout.print("{s}{s}\n", .{ index_string, node_name });
 
                 for (node.body) |statement| {
-                    try self.print_node(statement, indent + 2);
+                    try self.print_node(statement, indent + spaces_per_indent);
                 }
 
                 return;
@@ -46,18 +49,66 @@ pub const Printer = struct {
 
             .RETURN => {
                 try stdout.print("{s}{s}\n", .{ index_string, node_name });
-                try self.print_node(node.ast.binary.lhs, indent + 2);
+                try self.print_node(node.ast.binary.lhs, indent + spaces_per_indent);
                 return;
             },
+
+            .ASSIGN => {
+                try stdout.print("{s}{s}\n", .{ index_string, node_name });
+                try self.print_node(node.ast.binary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.binary.rhs, indent + spaces_per_indent);
+                return;
+            },
+
+            .STATEMENT => {
+                switch (node.ast) {
+                    .binary => |b| {
+                        try stdout.print("{s}{s}\n", .{ index_string, node_name });
+                        try self.print_node(b.lhs, indent + spaces_per_indent);
+                        try self.print_node(b.rhs, indent + spaces_per_indent);
+                    },
+                    else => {},
+                }
+                return;
+            },
+
+            // Literals
 
             .NUM => {
                 try stdout.print("{s}{s} {d}\n", .{ index_string, node_name, node.value });
                 return;
             },
 
-            else => {
-                std.log.warn("undocumented node kind: {s}", .{node_name});
+            // Variables
+
+            .VAR => {
+                try stdout.print("{s}{s} {s}\n", .{ index_string, node_name, node.variable.name });
+                return;
             },
+
+            // Operations
+            .ADD, .SUB, .MUL, .DIV => {
+                try stdout.print("{s}{s}\n", .{ index_string, node_name });
+                try self.print_node(node.ast.binary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.binary.rhs, indent + spaces_per_indent);
+                return;
+            },
+
+            .NEG => {
+                try stdout.print("{s}{s}\n", .{ index_string, node_name });
+                try self.print_node(node.ast.binary.rhs, indent + spaces_per_indent);
+                return;
+            },
+
+            // Equality
+            .EQ, .NE, .LT, .LE, .GT, .GE => {
+                try stdout.print("{s}{s}\n", .{ index_string, node_name });
+                try self.print_node(node.ast.binary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.binary.rhs, indent + spaces_per_indent);
+                return;
+            },
+
+            else => std.log.warn("undocumented node kind: {s}", .{node_name}),
         }
     }
 };

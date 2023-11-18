@@ -11,9 +11,23 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    // Flags
+    // Build Flags
+    const enable_tests = b.option(bool, "enable-tests",
+        \\Enables C files steps
+    );
+
+    const @"enable-bench" = b.option(bool, "enable-bench",
+        \\Embeds benchmarks into the executable and allows for --bench flag
+    );
+
+    // Options
     const exe_options = b.addOptions();
-    exe.addOptions("build_options", exe_options);
+
+    if (@"enable-bench") |bench| {
+        exe_options.addOption(bool, "enable-bench", bench);
+    }
+
+    exe.addOptions("options", exe_options);
 
     // TODO: Causes segfault when linked
     // exe.linkLibC();
@@ -33,7 +47,10 @@ pub fn build(b: *std.Build) !void {
     run_step.dependOn(&run_cmd.step);
 
     // Testing
+    if (enable_tests) |_| try addTests(b);
+}
 
+fn addTests(b: *std.Build) !void {
     var files = std.ArrayList([]const u8).init(b.allocator);
     const test_dir = try std.fs.cwd().openIterableDir("./tests", .{});
 

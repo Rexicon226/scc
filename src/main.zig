@@ -1,15 +1,27 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const build_options = @import("options");
+
 const ParserImport = @import("parser.zig");
 const CodeGen = @import("codegen.zig");
 const ErrorManager = @import("error.zig").ErrorManager;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 16 }){};
-var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+
+var arena = std.heap.ArenaAllocator.init(alloc: {
+    if (builtin.mode == .Debug) {
+        break :alloc gpa.allocator();
+    } else if (builtin.link_libc) {
+        break :alloc std.heap.c_allocator;
+    } else {
+        std.log.warn("libc not linked, had to fallback to gpa in release mode", .{});
+        break :alloc gpa.allocator();
+    }
+});
 const allocator = arena.allocator();
 
-const benchmark = "{ return 10; }";
+const benchmark = if (build_options.@"enable-bench") @embedFile("./bench/bench.c");
 
 fn usage() void {
     const stdout = std.io.getStdOut().writer();
@@ -67,6 +79,14 @@ pub fn main() !u8 {
 
         return 0;
     } else if (std.mem.eql(u8, file, "--bench")) {
+        if (!build_options.@"enable-bench") {
+            std.log.err(
+                \\Benchmarking is disabled
+                \\Please recompile with -Denable-bench=true to enable benchmarking
+            , .{});
+            return 1;
+        }
+
         try CodeGen.parse(
             benchmark,
             "",

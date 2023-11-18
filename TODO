@@ -1,1 +1,2 @@
 1. Add `@""` support for variables for Emojis. Credit: Freakman
+2. Rewrite the CLI parse, it's ass rn
