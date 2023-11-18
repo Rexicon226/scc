@@ -1,4 +1,7 @@
 const std = @import("std");
+const build_options = @import("options");
+const tracer = if (build_options.trace) @import("tracer");
+
 const TokenImport = @import("token.zig");
 const ParserImport = @import("parser.zig");
 
@@ -17,6 +20,12 @@ const Parser = ParserImport.Parser;
 var allocator: std.mem.Allocator = undefined;
 var writer: Writer = undefined;
 
+inline fn handler() void {
+    if (!build_options.trace) return;
+    const t = tracer.trace(@src());
+    defer t.end();
+}
+
 /// Top-level options for the parser behavior
 pub const ParserOptions = struct {
     /// If true, the parser will emit to `stdout`instead of the given file.
@@ -32,6 +41,8 @@ pub fn parse(
     options: ?ParserOptions,
     _allocator: std.mem.Allocator,
 ) !void {
+    handler();
+
     var printAst: bool = false;
     if (options) |o| printAst = o.printAst;
 

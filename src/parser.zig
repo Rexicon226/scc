@@ -1,4 +1,7 @@
 const std = @import("std");
+const build_options = @import("options");
+const tracer = if (build_options.trace) @import("tracer");
+
 const TokenImport = @import("token.zig");
 
 const Token = TokenImport.Token;
@@ -6,6 +9,12 @@ const Kind = TokenImport.Kind;
 
 const ErrorManager = @import("error.zig").ErrorManager;
 const ReportItem = @import("error.zig").ReportItem;
+
+inline fn handler() void {
+    if (!build_options.trace) return;
+    const t = tracer.trace(@src());
+    defer t.end();
+}
 
 pub fn stringToInt(source: []const u8) usize {
     return std.fmt.parseInt(usize, source, 10) catch {
@@ -29,6 +38,8 @@ pub const Parser = struct {
         tokens: []Token,
         allocator: std.mem.Allocator,
     ) Parser {
+        handler();
+
         return Parser{
             .source = source,
             .tokens = tokens,
@@ -40,6 +51,8 @@ pub const Parser = struct {
     }
 
     pub fn find_var(self: *Parser, tok: Token) ?*Object {
+        handler();
+
         for (self.locals.items) |local| {
             if (std.mem.eql(
                 u8,
@@ -53,6 +66,8 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) !*Function {
+        handler();
+
         var function = try self.allocator.create(Function);
 
         var statements = std.ArrayList(*Node).init(self.allocator);
@@ -63,6 +78,8 @@ pub const Parser = struct {
         // }
 
         while (self.index < self.tokens.len) {
+            handler();
+
             const node = self.statement(self.tokens[self.index]);
             try statements.append(node);
         }
@@ -78,6 +95,8 @@ pub const Parser = struct {
     }
 
     pub fn statement(self: *Parser, token: Token) *Node {
+        handler();
+
         if (token.kind == .Return) {
             self.skip(.Return);
             const node = Node.new_unary(
@@ -161,6 +180,8 @@ pub const Parser = struct {
     }
 
     pub fn compound_statement(self: *Parser) *Node {
+        handler();
+
         var body = std.ArrayListUnmanaged(*Node){};
 
         while (self.tokens[self.index].kind != .RightBracket) {
@@ -197,6 +218,8 @@ pub const Parser = struct {
     }
 
     pub fn expression(self: *Parser, token: Token) *Node {
+        handler();
+
         if (token.kind == .SemiColon) {
             self.skip(.SemiColon);
             return Node.new_node(
@@ -209,6 +232,8 @@ pub const Parser = struct {
     }
 
     pub fn expr_stmt(self: *Parser, token: Token) *Node {
+        handler();
+
         if (token.kind == .SemiColon) {
             self.skip(.SemiColon);
             return Node.new_node(
@@ -223,6 +248,8 @@ pub const Parser = struct {
     }
 
     pub fn assign(self: *Parser, token: Token) *Node {
+        handler();
+
         var node = self.equality(token);
 
         if (self.tokens[self.index].kind == .Assign) {
@@ -239,6 +266,8 @@ pub const Parser = struct {
     }
 
     pub fn equality(self: *Parser, token: Token) *Node {
+        handler();
+
         var node = self.relational(token);
 
         while (true) {
@@ -269,6 +298,8 @@ pub const Parser = struct {
     }
 
     pub fn relational(self: *Parser, token: Token) *Node {
+        handler();
+
         var node = self.add(token);
 
         while (true) {
@@ -321,6 +352,8 @@ pub const Parser = struct {
     }
 
     pub fn add(self: *Parser, token: Token) *Node {
+        handler();
+
         var node = self.mul(token);
 
         while (true) {
@@ -353,6 +386,8 @@ pub const Parser = struct {
     }
 
     pub fn mul(self: *Parser, token: Token) *Node {
+        handler();
+
         var node = self.unary(token);
 
         while (true) {
@@ -385,6 +420,8 @@ pub const Parser = struct {
     }
 
     pub fn unary(self: *Parser, token: Token) *Node {
+        handler();
+
         if (token.kind == .Plus) {
             self.skip(.Plus);
             return self.unary(self.tokens[self.index]);
@@ -422,6 +459,8 @@ pub const Parser = struct {
     }
 
     pub fn primary(self: *Parser, token: Token) *Node {
+        handler();
+
         if (token.kind == .LeftParen) {
             self.skip(.LeftParen);
             const node = self.add(self.tokens[self.index]);
@@ -478,6 +517,8 @@ pub const Parser = struct {
     }
 
     pub fn skip(self: *Parser, op: TokenImport.Kind) void {
+        handler();
+
         const token = self.tokens[self.index];
         if (token.kind != op) {
             var reports = std.ArrayList(ReportItem).init(self.allocator);
@@ -530,6 +571,8 @@ pub const Node = struct {
         kind: NodeKind,
         allocator: std.mem.Allocator,
     ) *Node {
+        handler();
+
         const node = allocator.create(Node) catch {
             @panic("failed to allocate node {}" ++ @typeName(@TypeOf(kind)));
         };
@@ -544,6 +587,8 @@ pub const Node = struct {
         num: usize,
         allocator: std.mem.Allocator,
     ) *Node {
+        handler();
+
         const node = new_node(.NUM, allocator);
         node.value = num;
 
@@ -558,6 +603,8 @@ pub const Node = struct {
         rhs: *Node,
         allocator: std.mem.Allocator,
     ) *Node {
+        handler();
+
         const node = new_node(kind, allocator);
 
         node.ast = Ast.new(.binary, .{
@@ -574,6 +621,8 @@ pub const Node = struct {
         lhs: *Node,
         allocator: std.mem.Allocator,
     ) *Node {
+        handler();
+
         const node = new_node(kind, allocator);
 
         node.ast = Ast.new(.binary, .{
@@ -588,6 +637,8 @@ pub const Node = struct {
         variable: *Object,
         allocator: std.mem.Allocator,
     ) *Node {
+        handler();
+
         const node = new_node(.VAR, allocator);
         node.variable = variable;
 
@@ -601,6 +652,8 @@ pub const Node = struct {
         name: []const u8,
         allocator: std.mem.Allocator,
     ) *Object {
+        handler();
+
         var object = allocator.create(Object) catch {
             @panic("failed to allocate object");
         };
@@ -655,6 +708,8 @@ pub const NodeKind = enum {
 };
 
 fn tok2node(kind: Kind) NodeKind {
+    handler();
+
     switch (kind) {
         .Plus => return .ADD,
         .Minus => return .SUB,
@@ -665,6 +720,8 @@ fn tok2node(kind: Kind) NodeKind {
 }
 
 fn node2tok(kind: NodeKind) Kind {
+    handler();
+
     switch (kind) {
         .ADD => return .Plus,
         .SUB => return .Minus,

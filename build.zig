@@ -1,5 +1,8 @@
 const std = @import("std");
 
+var trace: ?bool = false;
+var @"enable-bench": ?bool = false;
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -16,21 +19,31 @@ pub fn build(b: *std.Build) !void {
         \\Enables C files steps
     );
 
-    const @"enable-bench" = b.option(bool, "enable-bench",
+    @"enable-bench" = b.option(bool, "enable-bench",
         \\Embeds benchmarks into the executable and allows for --bench flag
+        \\                                  - Forces ReleaseFast
+    );
+
+    trace = b.option(bool, "trace",
+        \\Enables tracing of the compiler using the default backend (spall)
     );
 
     // Options
     const exe_options = b.addOptions();
 
     if (@"enable-bench") |bench| {
-        exe_options.addOption(bool, "enable-bench", bench);
+        if (bench) exe.optimize = .ReleaseFast;
     }
+
+    exe_options.addOption(bool, "enable-bench", @"enable-bench" orelse false);
+    exe_options.addOption(bool, "trace", trace orelse false);
+    exe_options.addOption(usize, "src_file_trimlen", std.fs.path.dirname(std.fs.path.dirname(@src().file).?).?.len);
 
     exe.addOptions("options", exe_options);
 
-    // TODO: Causes segfault when linked
-    // exe.linkLibC();
+    // Dependencies
+
+    try addDeps(b, exe);
 
     // exe.use_lld = false;
     // exe.use_llvm = false;
@@ -48,6 +61,22 @@ pub fn build(b: *std.Build) !void {
 
     // Testing
     if (enable_tests) |_| try addTests(b);
+}
+
+fn addDeps(
+    b: *std.Build,
+    exe: *std.build.Step.Compile,
+) !void {
+    if (trace) |_| {
+        const tracer_dep = b.dependency("tracer", .{
+            .target = exe.target,
+        });
+        exe.addModule("tracer", tracer_dep.module("tracer"));
+        exe.linkLibC(); // Needs libc.
+    }
+
+    // TODO: Causes segfault when linked
+    // exe.linkLibC();
 }
 
 fn addTests(b: *std.Build) !void {

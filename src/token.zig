@@ -1,4 +1,12 @@
 const std = @import("std");
+const build_options = @import("options");
+const tracer = if (build_options.trace) @import("tracer");
+
+pub inline fn handler() void {
+    if (!build_options.trace) return;
+    const t = tracer.trace(@src());
+    defer t.end();
+}
 
 /// Maximium number of characters a identifier can be.
 const MAX_CHAR = 10;
@@ -83,6 +91,8 @@ pub const Token = struct {
         line: Line,
         column: usize,
     ) !Token {
+        handler();
+
         return .{
             .kind = kind,
             .start = start,
@@ -103,6 +113,8 @@ pub const Tokenizer = struct {
     line: Line = .{ .start = 0, .end = 0, .line = 1, .column = 1 },
 
     pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) !Tokenizer {
+        handler();
+
         return Tokenizer{
             .buffer = source,
             .tokens = blk: {
@@ -115,11 +127,15 @@ pub const Tokenizer = struct {
     }
 
     pub inline fn advance(self: *Tokenizer, amount: usize) void {
+        handler();
+
         self.index += amount;
         self.line.column += amount;
     }
 
     pub fn generate(self: *Tokenizer) !void {
+        handler();
+
         const buffer = self.buffer;
 
         if (self.index >= buffer.len) {
@@ -138,6 +154,8 @@ pub const Tokenizer = struct {
         };
 
         while (self.index < buffer.len) {
+            handler();
+
             const c = buffer[self.index];
 
             // Space
