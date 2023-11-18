@@ -8,7 +8,7 @@ pub inline fn handler() void {
     defer t.end();
 }
 
-/// Maximium number of characters a identifier can be.
+/// Maximium number of characters an identifier can be.
 const MAX_CHAR = 10;
 
 pub const Kind = enum {
@@ -162,6 +162,19 @@ pub const Tokenizer = struct {
             if (c == ' ') {
                 self.advance(1);
                 continue;
+            }
+
+            // Comment
+            // Check the first character of the line, and the next character is a '/'
+            if (c == '/' and self.line.column == 1 and self.index + 1 < buffer.len) {
+                if (buffer[self.index + 1] == '/') {
+                    // Skip the rest of the line
+                    while (self.index < buffer.len and buffer[self.index] != '\n') {
+                        self.advance(1);
+                    }
+
+                    continue;
+                }
             }
 
             // Newline
