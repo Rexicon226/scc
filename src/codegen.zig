@@ -122,7 +122,7 @@ fn gen_addr(node: *Node) void {
         },
 
         .DEREF => {
-            expression(node.ast.binary.lhs);
+            expression(node.ast.unary.lhs);
             return;
         },
 
@@ -163,7 +163,7 @@ fn expression(node: *Node) void {
         },
 
         .NEG => {
-            expression(node.ast.binary.lhs);
+            expression(node.ast.unary.lhs);
             writer.print("  neg %rax\n");
             return;
         },
@@ -175,13 +175,13 @@ fn expression(node: *Node) void {
         },
 
         .DEREF => {
-            expression(node.ast.binary.lhs);
+            expression(node.ast.unary.lhs);
             writer.print("  mov (%rax), %rax\n");
             return;
         },
 
         .ADDR => {
-            gen_addr(node.ast.binary.lhs);
+            gen_addr(node.ast.unary.lhs);
             return;
         },
 
@@ -293,13 +293,13 @@ fn statement(node: *Node) void {
         },
 
         .RETURN => {
-            expression(node.ast.binary.lhs);
+            expression(node.ast.unary.lhs);
             writer.print("  jmp .L.return\n");
             return;
         },
 
         .STATEMENT => {
-            expression(node.ast.binary.lhs);
+            expression(node.ast.unary.lhs);
             return;
         },
 

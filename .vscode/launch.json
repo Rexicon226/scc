@@ -10,6 +10,7 @@
             "request": "launch",
             "target": "./zig-out/bin/scc",
             "cwd": "${workspaceRoot}",
+            "arguments": "--cli '{ return (&x+2)-&x+3; }'",
             "valuesFormatting": "parseText"
         }
     ]
