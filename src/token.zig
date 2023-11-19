@@ -2,12 +2,6 @@ const std = @import("std");
 const build_options = @import("options");
 const tracer = if (build_options.trace) @import("tracer");
 
-pub inline fn handler() void {
-    if (!build_options.trace) return;
-    const t = tracer.trace(@src());
-    defer t.end();
-}
-
 /// Maximium number of characters an identifier can be.
 const MAX_CHAR = 10;
 
@@ -28,6 +22,7 @@ pub const Kind = enum {
     LeftBracket, // {
     RightBracket, // }
     SemiColon, // ;
+    Comma, // ,
 
     // Pointers
     Assign, // =
@@ -40,6 +35,9 @@ pub const Kind = enum {
     For, // for
     While, // while
 
+    // Types
+    Int, // int
+
     // Equality
     Eq, // ==
     Ne, // !=
@@ -51,11 +49,15 @@ pub const Kind = enum {
 
 // Spaces after keywords are very important!!!
 const Keywords = std.ComptimeStringMap(Kind, .{
+    // Keywords
     .{ "return ", .Return },
     .{ "if ", .If },
     .{ "else ", .Else },
     .{ "for ", .For },
     .{ "while", .While },
+
+    // Types
+    .{ "int ", .Int },
 });
 
 /// Source Position Information
@@ -98,7 +100,8 @@ pub const Token = struct {
         end: usize,
         line: Line,
     ) !Token {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         return .{
             .kind = kind,
@@ -106,6 +109,17 @@ pub const Token = struct {
             .end = end,
             .line = line,
         };
+    }
+
+    pub fn get_ident(self: Token, source: [:0]const u8) []const u8 {
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
+
+        if (self.kind != .Variable) {
+            @panic("not a variable token");
+        }
+
+        return source[self.start..self.end];
     }
 };
 
@@ -119,7 +133,8 @@ pub const Tokenizer = struct {
     line: Line = .{ .start = 0, .end = 0, .line = 1, .column = 1 },
 
     pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) !Tokenizer {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         return Tokenizer{
             .buffer = source,
@@ -134,14 +149,16 @@ pub const Tokenizer = struct {
     }
 
     pub inline fn advance(self: *Tokenizer, amount: usize) void {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         self.index += amount;
         self.line.column += amount;
     }
 
     pub fn generate(self: *Tokenizer) !void {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const buffer = self.buffer;
 
@@ -161,7 +178,8 @@ pub const Tokenizer = struct {
         };
 
         while (self.index < buffer.len) {
-            handler();
+            const t_ = if (comptime build_options.trace) tracer.trace(@src());
+            defer if (comptime build_options.trace) t_.end();
 
             const c = buffer[self.index];
 
@@ -206,6 +224,9 @@ pub const Tokenizer = struct {
             {
                 const is_keyword: bool = keyword: {
                     inline for (Keywords.kvs) |entry| {
+                        const t__ = if (comptime build_options.trace) tracer.trace(@src());
+                        defer if (comptime build_options.trace) t__.end();
+
                         const key_len = entry.key.len;
                         if (buffer[self.index..].len > key_len) {
                             const potential_keyword = buffer[self.index .. self.index + key_len];
@@ -396,6 +417,20 @@ pub const Tokenizer = struct {
                 try self.tokens.append(
                     try Token.new_token(
                         .SemiColon,
+                        self.index,
+                        self.index + 1,
+                        self.line,
+                    ),
+                );
+
+                self.advance(1);
+                continue;
+            }
+
+            if (c == ',') {
+                try self.tokens.append(
+                    try Token.new_token(
+                        .Comma,
                         self.index,
                         self.index + 1,
                         self.line,

@@ -10,12 +10,6 @@ const Kind = TokenImport.Kind;
 const ErrorManager = @import("error.zig").ErrorManager;
 const ReportItem = @import("error.zig").ReportItem;
 
-inline fn handler() void {
-    if (!build_options.trace) return;
-    const t = tracer.trace(@src());
-    defer t.end();
-}
-
 pub fn stringToInt(source: []const u8) usize {
     return std.fmt.parseInt(usize, source, 10) catch {
         std.log.err("Failed to parse int: {s}\n", .{source});
@@ -38,7 +32,8 @@ pub const Parser = struct {
         tokens: []Token,
         allocator: std.mem.Allocator,
     ) Parser {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         return Parser{
             .source = source,
@@ -51,7 +46,8 @@ pub const Parser = struct {
     }
 
     pub fn find_var(self: *Parser, tok: Token) ?*Object {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         for (self.locals.items) |local| {
             if (std.mem.eql(
@@ -67,7 +63,8 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) !*Function {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var function = try self.allocator.create(Function);
 
@@ -79,7 +76,8 @@ pub const Parser = struct {
         // }
 
         while (self.index < self.tokens.len) {
-            handler();
+            const t_ = if (comptime build_options.trace) tracer.trace(@src());
+            defer if (comptime build_options.trace) t_.end();
 
             const node = self.statement(self.tokens[self.index]);
             try statements.append(node);
@@ -96,7 +94,8 @@ pub const Parser = struct {
     }
 
     pub fn statement(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         if (token.kind == .Return) {
             self.skip(.Return);
@@ -185,12 +184,19 @@ pub const Parser = struct {
     }
 
     pub fn compound_statement(self: *Parser) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var body = std.ArrayListUnmanaged(*Node){};
 
         while (self.tokens[self.index].kind != .RightBracket) {
-            const node = self.statement(self.tokens[self.index]);
+            var node: *Node = undefined;
+            // if (self.tokens[self.index].kind == .Int) {
+            //     node = self.declaration(self.tokens[self.index]);
+            // } else {
+            //     node = self.statement(self.tokens[self.index]);
+            // }
+            node = self.statement(self.tokens[self.index]);
             add_type(node, self.allocator);
 
             body.append(self.allocator, node) catch {
@@ -225,13 +231,15 @@ pub const Parser = struct {
     }
 
     pub fn expression(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         return self.assign(token);
     }
 
     pub fn expr_stmt(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         if (token.kind == .SemiColon) {
             self.skip(.SemiColon);
@@ -247,7 +255,8 @@ pub const Parser = struct {
     }
 
     pub fn assign(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var node = self.equality(token);
 
@@ -265,7 +274,8 @@ pub const Parser = struct {
     }
 
     pub fn equality(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var node = self.relational(token);
 
@@ -297,7 +307,8 @@ pub const Parser = struct {
     }
 
     pub fn relational(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var node = self.add(token);
 
@@ -351,7 +362,8 @@ pub const Parser = struct {
     }
 
     pub fn add(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var node = self.mul(token);
 
@@ -383,7 +395,8 @@ pub const Parser = struct {
     }
 
     pub fn mul(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var node = self.unary(token);
 
@@ -417,7 +430,8 @@ pub const Parser = struct {
     }
 
     pub fn unary(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         if (token.kind == .Plus) {
             self.skip(.Plus);
@@ -456,7 +470,8 @@ pub const Parser = struct {
     }
 
     pub fn primary(self: *Parser, token: Token) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         if (token.kind == .LeftParen) {
             self.skip(.LeftParen);
@@ -466,7 +481,7 @@ pub const Parser = struct {
         }
 
         if (token.kind == .Variable) {
-            var object = self.find_var(token);
+            const object = self.find_var(token);
             self.skip(.Variable);
 
             if (object) |obj| {
@@ -484,6 +499,7 @@ pub const Parser = struct {
                     obj,
                     self.allocator,
                 );
+                // @panic("undefined variable");
             }
         }
 
@@ -514,7 +530,8 @@ pub const Parser = struct {
     }
 
     pub fn skip(self: *Parser, op: TokenImport.Kind) void {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const token = self.tokens[self.index];
         if (token.kind != op) {
@@ -609,6 +626,59 @@ pub const Parser = struct {
 
         @panic("invalid operands");
     }
+
+    pub fn declaration(self: *Parser, token: Token) *Node {
+        _ = token;
+
+        var head: *Node = undefined;
+
+        var i: usize = 0;
+        while (self.tokens[self.index].kind == .SemiColon) {
+            i += 1;
+            if (i > 0) {
+                self.skip(.Comma);
+            }
+
+            const ty = self.declarator(self.tokens[self.index], Type.create_int(self.allocator));
+            const variable = Node.new_lvar(&self.locals, ty.name.get_ident(self.source), ty, self.allocator);
+
+            if (self.tokens[self.index].kind != .Eq) {
+                continue;
+            }
+
+            const lhs = Node.new_variable(variable, self.allocator);
+            const rhs = self.assign(self.tokens[self.index]);
+            head = Node.new_binary(.ASSIGN, lhs, rhs, self.allocator);
+        }
+
+        const node = Node.new_node(.BLOCK, self.allocator);
+        node.body = @constCast(&[_]*Node{head});
+        node.hasBody = true;
+        return node;
+    }
+
+    pub fn declarator(self: *Parser, token: Token, ty: *Type) *Type {
+
+        //while (consume(&tok, tok, "*"))
+        //  ty = pointer_to(ty);
+
+        if (token.kind != .Variable) {
+            @panic("expected a variable");
+        }
+
+        ty.name.* = token;
+        self.index += 1;
+        return ty;
+    }
+
+    pub fn consume(self: *Parser, token: *Token, target: *Kind) bool {
+        if (token.kind == target) {
+            self.index += 1;
+            return true;
+        }
+
+        return false;
+    }
 };
 
 pub const Node = struct {
@@ -644,7 +714,8 @@ pub const Node = struct {
         kind: NodeKind,
         allocator: std.mem.Allocator,
     ) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const node = allocator.create(Node) catch {
             @panic("failed to allocate node {}" ++ @typeName(@TypeOf(kind)));
@@ -662,7 +733,8 @@ pub const Node = struct {
         num: usize,
         allocator: std.mem.Allocator,
     ) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const node = new_node(.NUM, allocator);
 
@@ -678,7 +750,8 @@ pub const Node = struct {
         rhs: *Node,
         allocator: std.mem.Allocator,
     ) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const node = new_node(kind, allocator);
 
@@ -696,7 +769,8 @@ pub const Node = struct {
         operand: *Node,
         allocator: std.mem.Allocator,
     ) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const node = new_node(kind, allocator);
 
@@ -711,7 +785,8 @@ pub const Node = struct {
         variable: *Object,
         allocator: std.mem.Allocator,
     ) *Node {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const node = new_node(.VAR, allocator);
         node.variable = variable;
@@ -724,15 +799,18 @@ pub const Node = struct {
     pub fn new_lvar(
         locals: *std.ArrayList(*Object),
         name: []const u8,
+        // ty: *Type,
         allocator: std.mem.Allocator,
     ) *Object {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         var object = allocator.create(Object) catch {
             @panic("failed to allocate object");
         };
 
         object.name = name;
+        // object.ty = ty;
 
         locals.insert(0, object) catch {
             @panic("failed to append to locals");
@@ -745,9 +823,11 @@ pub const Node = struct {
 pub const Type = struct {
     kind: TypeKind,
     base: ?*Type = null,
+    name: *Token,
 
     pub fn create_int(allocator: std.mem.Allocator) *Type {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const ty = allocator.create(Type) catch @panic("failed to allocate Type");
         ty.base = null;
@@ -756,7 +836,8 @@ pub const Type = struct {
     }
 
     pub fn create_ptr(allocator: std.mem.Allocator) *Type {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const ty = allocator.create(Type) catch @panic("failed to allocate Type");
         ty.base = null;
@@ -765,7 +846,8 @@ pub const Type = struct {
     }
 
     pub fn create_empty(allocator: std.mem.Allocator) *Type {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src());
+        defer if (comptime build_options.trace) t.end();
 
         const ty = allocator.create(Type) catch @panic("failed to allocate Type");
         ty.base = null;
@@ -787,7 +869,8 @@ fn pointer_to(
     base: *Type,
     allocator: std.mem.Allocator,
 ) *Type {
-    handler();
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
 
     const ty = allocator.create(Type) catch @panic("failed to allocate type");
     ty.kind = .PTR;
@@ -799,7 +882,8 @@ fn add_type(
     node: *Node,
     allocator: std.mem.Allocator,
 ) void {
-    handler();
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
 
     if (node.hasType) return;
 
@@ -907,7 +991,8 @@ pub const NodeKind = enum {
 };
 
 fn tok2node(kind: Kind) NodeKind {
-    handler();
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
 
     switch (kind) {
         .Plus => return .ADD,
@@ -919,7 +1004,8 @@ fn tok2node(kind: Kind) NodeKind {
 }
 
 fn node2tok(kind: NodeKind) Kind {
-    handler();
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
 
     switch (kind) {
         .ADD => return .Plus,
@@ -947,6 +1033,7 @@ pub const Ast = union(enum) {
 
 pub const Object = struct {
     name: []const u8,
+    ty: *Type,
     offset: isize, // Offset from RBP
 };
 

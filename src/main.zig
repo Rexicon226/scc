@@ -3,9 +3,8 @@ const builtin = @import("builtin");
 
 const build_options = @import("options");
 
-const tracer = if (build_options.trace) @import("tracer");
-// Won't be accessed if tracer is "void", and can be safely unchecked.
-pub const tracer_impl = tracer.spall;
+const tracer = @import("tracer");
+pub const tracer_impl = if (build_options.trace) tracer.spall else tracer.none;
 
 const ParserImport = @import("parser.zig");
 const CodeGen = @import("codegen.zig");
@@ -58,14 +57,14 @@ pub fn main() !u8 {
     defer _ = gpa.deinit();
     defer arena.deinit();
 
-    if (build_options.trace) {
+    if (comptime build_options.trace) {
         std.log.info("Tracing enabled", .{});
         try tracer.init();
         try tracer.init_thread();
     }
 
     defer {
-        if (build_options.trace) {
+        if (comptime build_options.trace) {
             tracer.deinit();
             tracer.deinit_thread();
         }
@@ -137,7 +136,7 @@ pub fn main() !u8 {
             source_buf = try source.readToEndAllocOptions(allocator, source_size, null, 4, 0);
 
             var outputFile = std.mem.splitSequence(u8, file, ".c");
-            var outputFileName = outputFile.next().?;
+            const outputFileName = outputFile.next().?;
             output_file = try std.fmt.allocPrint(allocator, "{s}.s", .{outputFileName});
         }
     }

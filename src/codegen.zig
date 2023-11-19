@@ -20,12 +20,6 @@ const Parser = ParserImport.Parser;
 var allocator: std.mem.Allocator = undefined;
 var writer: Writer = undefined;
 
-inline fn handler() void {
-    if (!build_options.trace) return;
-    const t = tracer.trace(@src());
-    defer t.end();
-}
-
 /// Top-level options for the parser behavior
 pub const ParserOptions = struct {
     /// If true, the parser will emit to `stdout`instead of the given file.
@@ -41,7 +35,8 @@ pub fn parse(
     options: ?ParserOptions,
     _allocator: std.mem.Allocator,
 ) !void {
-    handler();
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
 
     var printAst: bool = false;
     if (options) |o| printAst = o.printAst;
@@ -104,17 +99,26 @@ var depth: usize = 0;
 
 /// Pushes the value of rax onto the stack
 fn push() void {
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
+
     writer.print("  push %rax\n");
     depth += 1;
 }
 
 /// Pops the value of `reg` from the stack
 fn pop(reg: []const u8) void {
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
+
     writer.printArg("  pop {s}\n", .{reg});
     depth -= 1;
 }
 
 fn gen_addr(node: *Node) void {
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
+
     switch (node.kind) {
         .VAR => {
             writer.printArg("  lea {d}(%rbp), %rax\n", .{node.variable.offset});
@@ -137,12 +141,18 @@ fn gen_addr(node: *Node) void {
 ///
 /// e.g. `align_to(5, 4) == 8`
 fn align_to(n: usize, al: usize) usize {
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
+
     return (n + al - 1) / al * al;
 }
 
 /// Pre-calculates and assigns the offset of each
 /// local variable in `prog`
 fn assign_lvar_offsets(prog: *Function) void {
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
+
     var offset: isize = 0;
 
     for (prog.locals) |local| {
@@ -156,6 +166,9 @@ fn assign_lvar_offsets(prog: *Function) void {
 var counter: usize = 0;
 
 fn expression(node: *Node) void {
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
+
     switch (node.kind) {
         .NUM => {
             writer.printArg("  mov ${d}, %rax\n", .{node.value});
@@ -244,6 +257,9 @@ fn expression(node: *Node) void {
 }
 
 fn statement(node: *Node) void {
+    const t = if (comptime build_options.trace) tracer.trace(@src());
+    defer if (comptime build_options.trace) t.end();
+
     switch (node.kind) {
         .IF => {
             counter += 1;
