@@ -1,5 +1,9 @@
 zig-cache
 zig-out
 
+traces/*
+!traces/.keep
+
 **.s
 **.o
+tmp

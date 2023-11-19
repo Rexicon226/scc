@@ -1,8 +1,11 @@
 const std = @import("std");
 
+var trace: ?bool = false;
+var @"enable-bench": ?bool = false;
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .Debug });
+    const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
         .name = "scc",
@@ -10,6 +13,40 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+
+    // Build Flags
+    const enable_tests = b.option(bool, "enable-tests",
+        \\Enables C files steps
+    );
+
+    @"enable-bench" = b.option(bool, "enable-bench",
+        \\Embeds benchmarks into the executable and allows for --bench flag
+        \\                                  - Forces ReleaseFast
+    );
+
+    trace = b.option(bool, "trace",
+        \\Enables tracing of the compiler using the default backend (spall)
+    );
+
+    // Options
+    const exe_options = b.addOptions();
+
+    if (@"enable-bench") |bench| {
+        if (bench) exe.optimize = .ReleaseFast;
+    }
+
+    exe_options.addOption(bool, "enable-bench", @"enable-bench" orelse false);
+    exe_options.addOption(bool, "trace", trace orelse false);
+    exe_options.addOption(usize, "src_file_trimlen", std.fs.path.dirname(std.fs.path.dirname(@src().file).?).?.len);
+
+    exe.addOptions("options", exe_options);
+
+    // Dependencies
+
+    try addDeps(b, exe);
+
+    // exe.use_lld = false;
+    // exe.use_llvm = false;
 
     b.installArtifact(exe);
     const run_cmd = b.addRunArtifact(exe);
@@ -23,7 +60,26 @@ pub fn build(b: *std.Build) !void {
     run_step.dependOn(&run_cmd.step);
 
     // Testing
+    if (enable_tests) |_| try addTests(b);
+}
 
+fn addDeps(
+    b: *std.Build,
+    exe: *std.build.Step.Compile,
+) !void {
+    if (trace) |_| {
+        const tracer_dep = b.dependency("tracer", .{
+            .target = exe.target,
+        });
+        exe.addModule("tracer", tracer_dep.module("tracer"));
+        exe.linkLibC(); // Needs libc.
+    }
+
+    // TODO: Causes segfault when linked
+    // exe.linkLibC();
+}
+
+fn addTests(b: *std.Build) !void {
     var files = std.ArrayList([]const u8).init(b.allocator);
     const test_dir = try std.fs.cwd().openIterableDir("./tests", .{});
 

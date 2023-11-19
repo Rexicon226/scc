@@ -4,7 +4,7 @@ assert() {
   input="$2"
 
   ./zig-out/bin/scc --cli "$input" > tmp.s || exit
-  gcc -static -o tmp tmp.s
+  zig cc -Wno-unused-command-line-argument -static -z noexecstack -o tmp tmp.s
   ./tmp
   actual="$?"
 
@@ -78,5 +78,13 @@ assert 3 '{ for (;;) {return 3;} return 5; }'
 
 assert 10 '{ i=0; while(i<10) { i=i+1; } return i; }'
 
+assert 3 '{ x=3; return *&x; }'
+assert 3 '{ x=3; y=&x; z=&y; return **z; }'
+assert 5 '{ x=3; y=5; return *(&x+8); }'
+assert 5 '{ x=3; y=&x; *y=5; return x; }'
+assert 7 '{ x=3; y=5; *(&x+8)=7; return y; }'
+assert 7 '{ x=3; y=5; *(&y-8)=7; return x; }'
 
 echo OK
+
+rm tmp tmp.s
