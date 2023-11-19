@@ -49,6 +49,15 @@ pub const Kind = enum {
     Ge, // >=
 };
 
+// Spaces after keywords are very important!!!
+const Keywords = std.ComptimeStringMap(Kind, .{
+    .{ "return ", .Return },
+    .{ "if ", .If },
+    .{ "else ", .Else },
+    .{ "for ", .For },
+    .{ "while", .While },
+});
+
 /// Source Position Information
 pub const Line = struct {
     /// The start index of the line that the token is on
@@ -119,7 +128,7 @@ pub const Tokenizer = struct {
             .buffer = source,
             .tokens = blk: {
                 var tokens = std.ArrayList(Token).init(allocator);
-                // I mean, in theory every character could be a token
+                // In theory every character could be a token
                 try tokens.ensureTotalCapacity(source.len);
                 break :blk tokens;
             },
@@ -198,105 +207,33 @@ pub const Tokenizer = struct {
 
             // Keywords
             {
-                if (c == 'r') {
-                    if (buffer[self.index..].len > 7) {
-                        const slice = buffer[self.index + 1 .. self.index + 7];
-                        if (std.mem.eql(u8, slice, "eturn ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .Return,
-                                    self.index,
-                                    self.index + 7,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
+                const is_keyword: bool = keyword: {
+                    inline for (Keywords.kvs) |entry| {
+                        const key_len = entry.key.len;
+                        if (buffer[self.index..].len > key_len) {
+                            const potential_keyword = buffer[self.index .. self.index + key_len];
+                            const exists = Keywords.get(potential_keyword);
 
-                            self.advance(7);
-                            continue;
+                            if (exists) |kind| {
+                                try self.tokens.append(
+                                    try Token.new_token(
+                                        kind,
+                                        self.index,
+                                        self.index + key_len,
+                                        self.line,
+                                        self.line.column,
+                                    ),
+                                );
+
+                                self.advance(key_len);
+                                break :keyword true;
+                            }
                         }
                     }
-                }
+                    break :keyword false;
+                };
 
-                if (c == 'i') {
-                    if (buffer[self.index..].len > 3) {
-                        const slice = buffer[self.index + 1 .. self.index + 3];
-                        if (std.mem.eql(u8, slice, "f ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .If,
-                                    self.index,
-                                    self.index + 3,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(3);
-                            continue;
-                        }
-                    }
-                }
-
-                if (c == 'e') {
-                    if (buffer[self.index..].len > 5) {
-                        const slice = buffer[self.index + 1 .. self.index + 5];
-                        if (std.mem.eql(u8, slice, "lse ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .Else,
-                                    self.index,
-                                    self.index + 5,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(5);
-                            continue;
-                        }
-                    }
-                }
-
-                if (c == 'f') {
-                    if (buffer[self.index..].len > 4) {
-                        const slice = buffer[self.index + 1 .. self.index + 4];
-                        if (std.mem.eql(u8, slice, "or ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .For,
-                                    self.index,
-                                    self.index + 4,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(4);
-                            continue;
-                        }
-                    }
-                }
-
-                if (c == 'w') {
-                    if (buffer[self.index..].len > 5) {
-                        const slice = buffer[self.index + 1 .. self.index + 5];
-                        if (std.mem.eql(u8, slice, "hile")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .While,
-                                    self.index,
-                                    self.index + 5,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(5);
-                            continue;
-                        }
-                    }
-                }
+                if (is_keyword) continue;
             }
 
             // Number
