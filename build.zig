@@ -33,9 +33,12 @@ pub fn build(b: *std.Build) !void {
 
     if (@"enable-bench") |bench| {
         if (bench) exe.optimize = .ReleaseFast;
+        exe.linkLibC(); // For the c_allocator
     }
 
     exe_options.addOption(bool, "enable-bench", @"enable-bench" orelse false);
+
+    // Trace
     exe_options.addOption(bool, "trace", trace orelse false);
     exe_options.addOption(usize, "src_file_trimlen", std.fs.path.dirname(std.fs.path.dirname(@src().file).?).?.len);
 
@@ -74,8 +77,6 @@ fn addDeps(
         exe.addModule("tracer", tracer_dep.module("tracer"));
         exe.linkLibC(); // Needs libc.
     }
-
-    exe.linkLibC();
 }
 
 fn addTests(b: *std.Build) !void {

@@ -49,7 +49,7 @@ pub const Printer = struct {
 
             .RETURN => {
                 try stdout.print("{s}{s}\n", .{ index_string, node_name });
-                try self.print_node(node.ast.unary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.unary.op, indent + spaces_per_indent);
                 return;
             },
 
@@ -62,20 +62,20 @@ pub const Printer = struct {
 
             .STATEMENT => {
                 try stdout.print("{s}{s}\n", .{ index_string, node_name });
-                try self.print_node(node.ast.unary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.unary.op, indent + spaces_per_indent);
                 return;
             },
 
             // Pointers
             .DEREF => {
                 try stdout.print("{s}{s}\n", .{ index_string, node_name });
-                try self.print_node(node.ast.unary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.unary.op, indent + spaces_per_indent);
                 return;
             },
 
             .ADDR => {
                 try stdout.print("{s}{s}\n", .{ index_string, node_name });
-                try self.print_node(node.ast.unary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.unary.op, indent + spaces_per_indent);
                 return;
             },
 
@@ -103,7 +103,7 @@ pub const Printer = struct {
 
             .NEG => {
                 try stdout.print("{s}{s}\n", .{ index_string, node_name });
-                try self.print_node(node.ast.unary.lhs, indent + spaces_per_indent);
+                try self.print_node(node.ast.unary.op, indent + spaces_per_indent);
                 return;
             },
 

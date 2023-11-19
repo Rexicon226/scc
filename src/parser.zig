@@ -693,7 +693,7 @@ pub const Node = struct {
     /// Will not eat the semicolon
     pub fn new_unary(
         kind: NodeKind,
-        lhs: *Node,
+        operand: *Node,
         allocator: std.mem.Allocator,
     ) *Node {
         handler();
@@ -701,7 +701,7 @@ pub const Node = struct {
         const node = new_node(kind, allocator);
 
         node.ast = Ast.new(.unary, .{
-            .lhs = lhs,
+            .op = operand,
         });
 
         return node;
@@ -747,6 +747,8 @@ pub const Type = struct {
     base: ?*Type = null,
 
     pub fn create_int(allocator: std.mem.Allocator) *Type {
+        handler();
+
         const ty = allocator.create(Type) catch @panic("failed to allocate Type");
         ty.base = null;
         ty.kind = .INT;
@@ -754,6 +756,8 @@ pub const Type = struct {
     }
 
     pub fn create_ptr(allocator: std.mem.Allocator) *Type {
+        handler();
+
         const ty = allocator.create(Type) catch @panic("failed to allocate Type");
         ty.base = null;
         ty.kind = .PTR;
@@ -761,6 +765,8 @@ pub const Type = struct {
     }
 
     pub fn create_empty(allocator: std.mem.Allocator) *Type {
+        handler();
+
         const ty = allocator.create(Type) catch @panic("failed to allocate Type");
         ty.base = null;
         return ty;
@@ -781,6 +787,8 @@ fn pointer_to(
     base: *Type,
     allocator: std.mem.Allocator,
 ) *Type {
+    handler();
+
     const ty = allocator.create(Type) catch @panic("failed to allocate type");
     ty.kind = .PTR;
     ty.base = base;
@@ -791,6 +799,8 @@ fn add_type(
     node: *Node,
     allocator: std.mem.Allocator,
 ) void {
+    handler();
+
     if (node.hasType) return;
 
     // Recurse
@@ -821,7 +831,7 @@ fn add_type(
             node.ty = blk: {
                 switch (node.ast) {
                     .unary => {
-                        break :blk node.ast.unary.lhs.ty;
+                        break :blk node.ast.unary.op.ty;
                     },
                     .binary => {
                         break :blk node.ast.binary.lhs.ty;
@@ -839,13 +849,13 @@ fn add_type(
             return;
         },
         .ADDR => {
-            node.ty = pointer_to(node.ast.unary.lhs.ty, allocator);
+            node.ty = pointer_to(node.ast.unary.op.ty, allocator);
             node.hasType = true;
             return;
         },
         .DEREF => {
-            if (node.ast.unary.lhs.ty.kind == .PTR) {
-                node.ty = node.ast.unary.lhs.ty.base orelse @panic("deref has no base");
+            if (node.ast.unary.op.ty.kind == .PTR) {
+                node.ty = node.ast.unary.op.ty.base orelse @panic("deref has no base");
                 node.hasType = true;
                 return;
             } else {
@@ -926,7 +936,7 @@ pub const Ast = union(enum) {
         rhs: *Node,
     },
     unary: struct {
-        lhs: *Node,
+        op: *Node,
     },
     invalid,
 
