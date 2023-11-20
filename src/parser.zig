@@ -117,8 +117,10 @@ pub const Parser = struct {
 
             self.skip(.LeftParen);
             node.cond = self.expression(self.tokens[self.index]);
+            node.hasCond = true;
             self.skip(.RightParen);
             node.then = self.statement(self.tokens[self.index]);
+            node.hasThen = true;
             if (self.tokens[self.index].kind == .Else) {
                 self.skip(.Else);
                 node.els = self.statement(self.tokens[self.index]);
@@ -150,6 +152,7 @@ pub const Parser = struct {
             self.skip(.RightParen);
 
             node.then = self.statement(self.tokens[self.index]);
+            node.hasThen = true;
             return node;
         }
 
@@ -167,6 +170,7 @@ pub const Parser = struct {
             self.skip(.RightParen);
 
             node.then = self.statement(self.tokens[self.index]);
+            node.hasThen = true;
             return node;
         }
 
@@ -187,6 +191,7 @@ pub const Parser = struct {
 
         while (self.tokens[self.index].kind != .RightBracket) {
             const node = self.statement(self.tokens[self.index]);
+            add_type(node, self.allocator);
 
             body.append(self.allocator, node) catch {
                 @panic("failed to append node");
@@ -353,8 +358,7 @@ pub const Parser = struct {
         while (true) {
             if (self.tokens[self.index].kind == .Plus) {
                 self.skip(.Plus);
-                node = Node.new_binary(
-                    .ADD,
+                node = self.top_add(
                     node,
                     self.mul(self.tokens[self.index]),
                     self.allocator,
@@ -364,8 +368,7 @@ pub const Parser = struct {
 
             if (self.tokens[self.index].kind == .Minus) {
                 self.skip(.Minus);
-                node = Node.new_binary(
-                    .SUB,
+                node = self.top_sub(
                     node,
                     self.mul(self.tokens[self.index]),
                     self.allocator,
@@ -537,11 +540,84 @@ pub const Parser = struct {
         }
         self.index += 1;
     }
+
+    // Built-in Overloads
+
+    pub fn top_add(
+        self: *Parser,
+        lhs: *Node,
+        rhs: *Node,
+        allocator: std.mem.Allocator,
+    ) *Node {
+        add_type(lhs, allocator);
+        add_type(rhs, allocator);
+
+        if (is_int(lhs.ty) and is_int(rhs.ty)) {
+            return Node.new_binary(.ADD, lhs, rhs, self.allocator);
+        }
+
+        if (lhs.ty.base) |_| if (rhs.ty.base) |_| {
+            @panic("invalid operands");
+        };
+
+        // num + ptr
+        if (!(lhs.ty.base == null)) {
+            if (rhs.ty.base) |_| {
+                const tmp = lhs.*;
+                lhs.* = rhs.*;
+                rhs.* = tmp;
+            }
+        }
+
+        // ptr + num
+        const node = Node.new_binary(.MUL, rhs, Node.new_num(8, self.allocator), self.allocator);
+        return Node.new_binary(.ADD, lhs, node, self.allocator);
+    }
+
+    pub fn top_sub(
+        self: *Parser,
+        lhs: *Node,
+        rhs: *Node,
+        allocator: std.mem.Allocator,
+    ) *Node {
+        add_type(lhs, allocator);
+        add_type(rhs, allocator);
+
+        // num - num
+        if (is_int(lhs.ty) and is_int(rhs.ty)) {
+            return Node.new_binary(.SUB, lhs, rhs, self.allocator);
+        }
+
+        // ptr - num
+        if (lhs.ty.base) |_| {
+            if (is_int(rhs.ty)) {
+                const node = Node.new_binary(.MUL, rhs, Node.new_num(8, self.allocator), self.allocator);
+                add_type(node, allocator);
+                const sub = Node.new_binary(.SUB, lhs, node, self.allocator);
+                sub.ty = lhs.ty;
+                return sub;
+            }
+        }
+
+        // ptr - ptr, basically how many elements are between them
+        if (lhs.ty.base) |_| if (rhs.ty.base) |_| {
+            const node = Node.new_binary(.SUB, lhs, rhs, allocator);
+            node.ty = Type.create_int(allocator);
+            node.hasType = true;
+            return Node.new_binary(.DIV, node, Node.new_num(8, self.allocator), self.allocator);
+        };
+
+        @panic("invalid operands");
+    }
 };
 
 pub const Node = struct {
     kind: NodeKind,
     ast: Ast,
+
+    // overloading
+    hasType: bool = false,
+    ty: *Type,
 
     // program
     hasBody: bool = false,
@@ -556,6 +632,7 @@ pub const Node = struct {
     els: *Node,
     hasElse: bool = false,
     hasCond: bool = false,
+    hasThen: bool = false,
 
     // for
     init: *Node,
@@ -572,9 +649,11 @@ pub const Node = struct {
         const node = allocator.create(Node) catch {
             @panic("failed to allocate node {}" ++ @typeName(@TypeOf(kind)));
         };
-        node.kind = kind;
 
+        node.kind = kind;
         node.ast = .invalid;
+
+        node.ty = Type.create_empty(allocator);
 
         return node;
     }
@@ -586,8 +665,8 @@ pub const Node = struct {
         handler();
 
         const node = new_node(.NUM, allocator);
-        node.value = num;
 
+        node.value = num;
         node.ast = .invalid;
 
         return node;
@@ -621,9 +700,8 @@ pub const Node = struct {
 
         const node = new_node(kind, allocator);
 
-        node.ast = Ast.new(.binary, .{
+        node.ast = Ast.new(.unary, .{
             .lhs = lhs,
-            .rhs = undefined,
         });
 
         return node;
@@ -663,6 +741,122 @@ pub const Node = struct {
         return object;
     }
 };
+
+pub const Type = struct {
+    kind: TypeKind,
+    base: ?*Type = null,
+
+    pub fn create_int(allocator: std.mem.Allocator) *Type {
+        const ty = allocator.create(Type) catch @panic("failed to allocate Type");
+        ty.base = null;
+        ty.kind = .INT;
+        return ty;
+    }
+
+    pub fn create_ptr(allocator: std.mem.Allocator) *Type {
+        const ty = allocator.create(Type) catch @panic("failed to allocate Type");
+        ty.base = null;
+        ty.kind = .PTR;
+        return ty;
+    }
+
+    pub fn create_empty(allocator: std.mem.Allocator) *Type {
+        const ty = allocator.create(Type) catch @panic("failed to allocate Type");
+        ty.base = null;
+        return ty;
+    }
+};
+
+pub const TypeKind = enum {
+    INT,
+    PTR,
+};
+
+/// Returns if the node is a number
+fn is_int(ty: *Type) bool {
+    return ty.kind == .INT;
+}
+
+fn pointer_to(
+    base: *Type,
+    allocator: std.mem.Allocator,
+) *Type {
+    const ty = allocator.create(Type) catch @panic("failed to allocate type");
+    ty.kind = .PTR;
+    ty.base = base;
+    return ty;
+}
+
+fn add_type(
+    node: *Node,
+    allocator: std.mem.Allocator,
+) void {
+    if (node.hasType) return;
+
+    // Recurse
+    switch (node.ast) {
+        .binary => |b| {
+            add_type(b.lhs, allocator);
+            add_type(b.rhs, allocator);
+        },
+        else => {},
+    }
+
+    if (node.hasCond) add_type(node.cond, allocator);
+    if (node.hasThen) add_type(node.then, allocator);
+    if (node.hasElse) add_type(node.els, allocator);
+    if (node.hasInit) add_type(node.init, allocator);
+    if (node.hasInc) add_type(node.inc, allocator);
+
+    if (node.hasBody) {
+        for (node.body) |b| {
+            add_type(b, allocator);
+        }
+    }
+
+    // Assign
+    switch (node.kind) {
+        // Binary
+        .ADD, .SUB, .MUL, .DIV, .NEG, .ASSIGN => {
+            node.ty = blk: {
+                switch (node.ast) {
+                    .unary => {
+                        break :blk node.ast.unary.lhs.ty;
+                    },
+                    .binary => {
+                        break :blk node.ast.binary.lhs.ty;
+                    },
+                    else => @panic("invalid ast"),
+                }
+            };
+
+            node.hasType = true;
+            return;
+        },
+        .EQ, .NE, .LT, .LE, .GT, .GE, .VAR, .NUM => {
+            node.ty = Type.create_int(allocator);
+            node.hasType = true;
+            return;
+        },
+        .ADDR => {
+            node.ty = pointer_to(node.ast.unary.lhs.ty, allocator);
+            node.hasType = true;
+            return;
+        },
+        .DEREF => {
+            if (node.ast.unary.lhs.ty.kind == .PTR) {
+                node.ty = node.ast.unary.lhs.ty.base orelse @panic("deref has no base");
+                node.hasType = true;
+                return;
+            } else {
+                node.ty = Type.create_int(allocator);
+                node.hasType = true;
+            }
+            return;
+        },
+        else => {},
+    }
+}
 
 pub const NodeKind = enum {
     // Operators
@@ -731,10 +925,13 @@ pub const Ast = union(enum) {
         lhs: *Node,
         rhs: *Node,
     },
+    unary: struct {
+        lhs: *Node,
+    },
     invalid,
 
-    pub inline fn new(comptime k: std.meta.Tag(@This()), init: anytype) @This() {
-        return @unionInit(@This(), @tagName(k), init);
+    pub inline fn new(comptime k: std.meta.Tag(Ast), init: anytype) Ast {
+        return @unionInit(Ast, @tagName(k), init);
     }
 };
 

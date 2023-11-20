@@ -75,8 +75,7 @@ fn addDeps(
         exe.linkLibC(); // Needs libc.
     }
 
-    // TODO: Causes segfault when linked
-    // exe.linkLibC();
+    exe.linkLibC();
 }
 
 fn addTests(b: *std.Build) !void {

@@ -19,7 +19,6 @@ var arena = std.heap.ArenaAllocator.init(alloc: {
     } else if (builtin.link_libc) {
         break :alloc std.heap.c_allocator;
     } else {
-        std.log.warn("libc not linked, had to fallback to gpa in release mode", .{});
         break :alloc gpa.allocator();
     }
 });
