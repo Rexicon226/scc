@@ -7,7 +7,7 @@ Heavily inspired from https://github.com/rui314/chibicc, the parser code is geni
 
 - [ ] Arrays
 - [ ] Zero-arity Functions
-- [ ] Pointer Arthemtics
+- [x] Pointer Arthemtics
 - [x] Pointers
 - [x] While Statement
 - [x] For Statement
