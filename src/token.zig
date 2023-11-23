@@ -100,7 +100,7 @@ pub const Token = struct {
         end: usize,
         line: Line,
     ) !Token {
-        const t = if (comptime build_options.trace) tracer.trace(@src());
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
         defer if (comptime build_options.trace) t.end();
 
         return .{
@@ -112,7 +112,7 @@ pub const Token = struct {
     }
 
     pub fn get_ident(self: Token, source: [:0]const u8) []const u8 {
-        const t = if (comptime build_options.trace) tracer.trace(@src());
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
         defer if (comptime build_options.trace) t.end();
 
         if (self.kind != .Variable) {
@@ -129,11 +129,16 @@ pub const Tokenizer = struct {
     tokens: std.ArrayList(Token),
 
     allocator: std.mem.Allocator,
+    progress: std.Progress,
 
     line: Line = .{ .start = 0, .end = 0, .line = 1, .column = 1 },
 
-    pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) !Tokenizer {
-        const t = if (comptime build_options.trace) tracer.trace(@src());
+    pub fn init(
+        source: [:0]const u8,
+        allocator: std.mem.Allocator,
+        progress: std.Progress,
+    ) !Tokenizer {
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
         defer if (comptime build_options.trace) t.end();
 
         return Tokenizer{
@@ -145,11 +150,12 @@ pub const Tokenizer = struct {
                 break :blk tokens;
             },
             .allocator = allocator,
+            .progress = progress,
         };
     }
 
     pub inline fn advance(self: *Tokenizer, amount: usize) void {
-        const t = if (comptime build_options.trace) tracer.trace(@src());
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
         defer if (comptime build_options.trace) t.end();
 
         self.index += amount;
@@ -157,7 +163,7 @@ pub const Tokenizer = struct {
     }
 
     pub fn generate(self: *Tokenizer) !void {
-        const t = if (comptime build_options.trace) tracer.trace(@src());
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
         defer if (comptime build_options.trace) t.end();
 
         const buffer = self.buffer;
@@ -177,9 +183,14 @@ pub const Tokenizer = struct {
             .column = 1,
         };
 
+        const char_prog = self.progress.start("Tokenizing", buffer.len);
+        defer char_prog.end();
+
         while (self.index < buffer.len) {
-            const t_ = if (comptime build_options.trace) tracer.trace(@src());
+            const t_ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
             defer if (comptime build_options.trace) t_.end();
+
+            char_prog.completeOne();
 
             const c = buffer[self.index];
 
@@ -224,7 +235,7 @@ pub const Tokenizer = struct {
             {
                 const is_keyword: bool = keyword: {
                     inline for (Keywords.kvs) |entry| {
-                        const t__ = if (comptime build_options.trace) tracer.trace(@src());
+                        const t__ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
                         defer if (comptime build_options.trace) t__.end();
 
                         const key_len = entry.key.len;

@@ -35,7 +35,7 @@ pub fn parse(
     options: ?ParserOptions,
     _allocator: std.mem.Allocator,
 ) !void {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     var printAst: bool = false;
@@ -51,11 +51,16 @@ pub fn parse(
         writer = _writer;
     }
 
-    var tokenizer = try Tokenizer.init(source, allocator);
+    // Progress
+    var progress: std.Progress = .{ .dont_print_on_dumb = true };
+    const main_progress_node = progress.start("", 0);
+    defer main_progress_node.end();
+
+    var tokenizer = try Tokenizer.init(source, allocator, progress);
     try tokenizer.generate();
     const tokens = try tokenizer.tokens.toOwnedSlice();
 
-    var parser = Parser.init(source, tokens, allocator);
+    var parser = Parser.init(source, tokens, allocator, progress);
     const function = try parser.parse();
 
     if (printAst) {
@@ -99,7 +104,7 @@ var depth: usize = 0;
 
 /// Pushes the value of rax onto the stack
 fn push() void {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     writer.print("  push %rax\n");
@@ -108,7 +113,7 @@ fn push() void {
 
 /// Pops the value of `reg` from the stack
 fn pop(reg: []const u8) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     writer.printArg("  pop {s}\n", .{reg});
@@ -116,7 +121,7 @@ fn pop(reg: []const u8) void {
 }
 
 fn gen_addr(node: *Node) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     switch (node.kind) {
@@ -141,7 +146,7 @@ fn gen_addr(node: *Node) void {
 ///
 /// e.g. `align_to(5, 4) == 8`
 fn align_to(n: usize, al: usize) usize {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     return (n + al - 1) / al * al;
@@ -150,7 +155,7 @@ fn align_to(n: usize, al: usize) usize {
 /// Pre-calculates and assigns the offset of each
 /// local variable in `prog`
 fn assign_lvar_offsets(prog: *Function) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     var offset: isize = 0;
@@ -166,7 +171,7 @@ fn assign_lvar_offsets(prog: *Function) void {
 var counter: usize = 0;
 
 fn expression(node: *Node) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     switch (node.kind) {
@@ -257,7 +262,7 @@ fn expression(node: *Node) void {
 }
 
 fn statement(node: *Node) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src());
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
     defer if (comptime build_options.trace) t.end();
 
     switch (node.kind) {
