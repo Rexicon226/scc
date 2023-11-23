@@ -56,11 +56,20 @@ pub fn parse(
     const main_progress_node = progress.start("", 0);
     defer main_progress_node.end();
 
-    var tokenizer = try Tokenizer.init(source, allocator, progress);
+    var tokenizer = try Tokenizer.init(
+        source,
+        allocator,
+        main_progress_node,
+    );
     try tokenizer.generate();
     const tokens = try tokenizer.tokens.toOwnedSlice();
 
-    var parser = Parser.init(source, tokens, allocator, progress);
+    var parser = Parser.init(
+        source,
+        tokens,
+        allocator,
+        main_progress_node,
+    );
     const function = try parser.parse();
 
     if (printAst) {
@@ -81,7 +90,15 @@ pub fn parse(
     writer.printArg("  sub ${d}, %rsp\n", .{function.stack_size});
 
     // Emit code
-    statement(function.body[0]);
+    const emit_prog = progress.start("Emitting Block", function.body.len);
+
+    for (function.body) |body| {
+        statement(body);
+
+        emit_prog.completeOne();
+    }
+
+    emit_prog.end();
 
     // Epilogue
     writer.print(".L.return:\n");

@@ -129,14 +129,14 @@ pub const Tokenizer = struct {
     tokens: std.ArrayList(Token),
 
     allocator: std.mem.Allocator,
-    progress: std.Progress,
+    progress: *std.Progress.Node,
 
     line: Line = .{ .start = 0, .end = 0, .line = 1, .column = 1 },
 
     pub fn init(
         source: [:0]const u8,
         allocator: std.mem.Allocator,
-        progress: std.Progress,
+        progress: *std.Progress.Node,
     ) !Tokenizer {
         const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
         defer if (comptime build_options.trace) t.end();
@@ -183,14 +183,19 @@ pub const Tokenizer = struct {
             .column = 1,
         };
 
-        const char_prog = self.progress.start("Tokenizing", buffer.len);
+        var char_prog = self.progress.start("Tokenizing", buffer.len);
+        char_prog.activate();
         defer char_prog.end();
 
         while (self.index < buffer.len) {
             const t_ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-            defer if (comptime build_options.trace) t_.end();
 
-            char_prog.completeOne();
+            defer {
+                if (comptime build_options.trace) t_.end();
+
+                char_prog.setCompletedItems(self.index);
+                char_prog.context.maybeRefresh();
+            }
 
             const c = buffer[self.index];
 

@@ -25,14 +25,14 @@ pub const Parser = struct {
     locals: std.ArrayList(*Object),
 
     allocator: std.mem.Allocator,
-    progress: std.Progress,
+    progress: *std.Progress.Node,
     errorManager: ErrorManager,
 
     pub fn init(
         source: [:0]const u8,
         tokens: []Token,
         allocator: std.mem.Allocator,
-        progress: std.Progress,
+        progress: *std.Progress.Node,
     ) Parser {
         const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
         defer if (comptime build_options.trace) t.end();
@@ -78,14 +78,18 @@ pub const Parser = struct {
         //     std.debug.print("Token: {}\n", .{token});
         // }
 
-        const token_prog = self.progress.start("Parsing", self.tokens.len);
+        var token_prog = self.progress.start("Parsing", self.tokens.len);
         defer token_prog.end();
 
         while (self.index < self.tokens.len) {
             const t_ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-            defer if (comptime build_options.trace) t_.end();
 
-            token_prog.completeOne();
+            defer {
+                if (comptime build_options.trace) t_.end();
+
+                token_prog.setCompletedItems(self.index);
+                token_prog.context.maybeRefresh();
+            }
 
             const node = self.statement(self.tokens[self.index]);
             try statements.append(node);
