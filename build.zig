@@ -81,7 +81,7 @@ fn addDeps(
 
 fn addTests(b: *std.Build) !void {
     var files = std.ArrayList([]const u8).init(b.allocator);
-    const test_dir = try std.fs.cwd().openIterableDir("./tests", .{});
+    const test_dir = try std.fs.cwd().openDir("tests", .{ .iterate = true });
 
     var walker = try test_dir.walk(b.allocator);
     defer walker.deinit();
