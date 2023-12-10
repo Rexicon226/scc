@@ -81,12 +81,13 @@ pub fn parse(
     // Pre-calculate the offsets we need
     assign_lvar_offsets(function);
 
-    // Ensure we're compiling for x86_64
-    // NOTE(SeedyROM): The architecture should be a cli option probably, not the same as the OS it's built on.
+    // Ensure we're compiling on x86_64
+    // NOTE(SeedyROM): The architecture should be a cli option probably,
+    // not the same as the OS it's built on.
     switch (builtin.cpu.arch) {
         .x86_64 => {},
         else => {
-            std.log.err("Unsupported architecture: {}\n", .{builtin.arch});
+            std.log.err("Unsupported architecture: {}\n", .{builtin.cpu.arch});
             @panic("Unsupported architecture");
         },
     }
@@ -94,8 +95,8 @@ pub fn parse(
     // Entry point depends on OS
     switch (builtin.os.tag) {
         .linux => {
-            writer.print("\t.globl _start\n");
-            writer.print("_start:\n");
+            writer.print("\t.globl main\n");
+            writer.print("main:\n");
         },
         .macos => {
             writer.print("\t.globl _main\n");

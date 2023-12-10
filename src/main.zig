@@ -25,6 +25,14 @@ const allocator = arena.allocator();
 
 const benchmark = if (build_options.@"enable-bench") @embedFile("./bench/bench.c");
 
+// Ensure allowed arch
+comptime {
+    switch (builtin.cpu.arch) {
+        .x86_64 => {},
+        else => @compileError("Unsupported architecture"),
+    }
+}
+
 fn usage() void {
     const stdout = std.io.getStdOut().writer();
 
