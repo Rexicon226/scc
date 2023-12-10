@@ -1,0 +1,11 @@
+.{
+    .name = "scc",
+    .version = "0.1.0",
+    .paths = .{""},
+    .dependencies = .{
+        .tracer = .{
+            .url = "https://github.com/nektro/zig-tracer/archive/bf4bf92cb2914c4b451e2aec44b04d2fffd643af.tar.gz",
+            .hash = "1220d3ebbbc985cd97aee35dd24a296e48ab852db1d6ef8d675125e4e65033d45275",
+        },
+    },
+}
