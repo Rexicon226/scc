@@ -126,7 +126,7 @@ pub const Report = struct {
             try up_dash.ensureTotalCapacity(self.source_range.len);
 
             var items = self.items[1..];
-            var reverse_items: []ReportItem = try self.allocator.alloc(ReportItem, self.items.len - 1);
+            const reverse_items: []ReportItem = try self.allocator.alloc(ReportItem, self.items.len - 1);
             @memcpy(reverse_items, items);
 
             // Sort the items by the column.
