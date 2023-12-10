@@ -1,16 +1,16 @@
 steps:
   checks:
-    image: sinontm/ziglang:v2
+    image: sinontm/ziglang:latest
     commands:
       - zig version
       - zig fmt --check .
 
   build:
-    image: sinontm/ziglang:v2
+    image: sinontm/ziglang:latest
     commands:
       - zig build
 
   test:
-    image: sinontm/ziglang:v2
+    image: sinontm/ziglang:latest
     commands:
       - ./test.sh
