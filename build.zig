@@ -103,8 +103,8 @@ fn addTests(b: *std.Build) !void {
     for (test_files) |file| {
         // Parse out the file
         var outputFileSplit = std.mem.splitSequence(u8, file, ".c");
-        var outputFile = outputFileSplit.next().?;
-        var outputFileName = try std.fmt.allocPrint(b.allocator, "{s}.s", .{outputFile});
+        const outputFile = outputFileSplit.next().?;
+        const outputFileName = try std.fmt.allocPrint(b.allocator, "{s}.s", .{outputFile});
 
         // Setup the ASM Build
         const test_command = [_][]const u8{

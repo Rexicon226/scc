@@ -2,12 +2,6 @@ const std = @import("std");
 const build_options = @import("options");
 const tracer = if (build_options.trace) @import("tracer");
 
-pub inline fn handler() void {
-    if (!build_options.trace) return;
-    const t = tracer.trace(@src());
-    defer t.end();
-}
-
 /// Maximium number of characters an identifier can be.
 const MAX_CHAR = 10;
 
@@ -28,6 +22,7 @@ pub const Kind = enum {
     LeftBracket, // {
     RightBracket, // }
     SemiColon, // ;
+    Comma, // ,
 
     // Pointers
     Assign, // =
@@ -40,6 +35,9 @@ pub const Kind = enum {
     For, // for
     While, // while
 
+    // Types
+    Int, // int
+
     // Equality
     Eq, // ==
     Ne, // !=
@@ -48,6 +46,19 @@ pub const Kind = enum {
     Gt, // >
     Ge, // >=
 };
+
+// Spaces after keywords are very important!!!
+const Keywords = std.ComptimeStringMap(Kind, .{
+    // Keywords
+    .{ "return ", .Return },
+    .{ "if ", .If },
+    .{ "else ", .Else },
+    .{ "for ", .For },
+    .{ "while", .While },
+
+    // Types
+    .{ "int ", .Int },
+});
 
 /// Source Position Information
 pub const Line = struct {
@@ -81,7 +92,6 @@ pub const Token = struct {
 
     // Metadata
     line: Line,
-    column: usize,
     file: []const u8 = "no file yet dummy",
 
     pub fn new_token(
@@ -89,17 +99,27 @@ pub const Token = struct {
         start: usize,
         end: usize,
         line: Line,
-        column: usize,
     ) !Token {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+        defer if (comptime build_options.trace) t.end();
 
         return .{
             .kind = kind,
             .start = start,
             .end = end,
             .line = line,
-            .column = column,
         };
+    }
+
+    pub fn get_ident(self: Token, source: [:0]const u8) []const u8 {
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+        defer if (comptime build_options.trace) t.end();
+
+        if (self.kind != .Variable) {
+            @panic("not a variable token");
+        }
+
+        return source[self.start..self.end];
     }
 };
 
@@ -109,33 +129,42 @@ pub const Tokenizer = struct {
     tokens: std.ArrayList(Token),
 
     allocator: std.mem.Allocator,
+    progress: *std.Progress.Node,
 
     line: Line = .{ .start = 0, .end = 0, .line = 1, .column = 1 },
 
-    pub fn init(source: [:0]const u8, allocator: std.mem.Allocator) !Tokenizer {
-        handler();
+    pub fn init(
+        source: [:0]const u8,
+        allocator: std.mem.Allocator,
+        progress: *std.Progress.Node,
+    ) !Tokenizer {
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+        defer if (comptime build_options.trace) t.end();
 
         return Tokenizer{
             .buffer = source,
             .tokens = blk: {
                 var tokens = std.ArrayList(Token).init(allocator);
-                // I mean, in theory every character could be a token
+                // In theory every character could be a token
                 try tokens.ensureTotalCapacity(source.len);
                 break :blk tokens;
             },
             .allocator = allocator,
+            .progress = progress,
         };
     }
 
     pub inline fn advance(self: *Tokenizer, amount: usize) void {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+        defer if (comptime build_options.trace) t.end();
 
         self.index += amount;
         self.line.column += amount;
     }
 
     pub fn generate(self: *Tokenizer) !void {
-        handler();
+        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+        defer if (comptime build_options.trace) t.end();
 
         const buffer = self.buffer;
 
@@ -154,8 +183,19 @@ pub const Tokenizer = struct {
             .column = 1,
         };
 
+        var char_prog = self.progress.start("Tokenizing", buffer.len);
+        char_prog.activate();
+        defer char_prog.end();
+
         while (self.index < buffer.len) {
-            handler();
+            const t_ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+
+            defer {
+                if (comptime build_options.trace) t_.end();
+
+                char_prog.setCompletedItems(self.index);
+                char_prog.context.maybeRefresh();
+            }
 
             const c = buffer[self.index];
 
@@ -198,105 +238,35 @@ pub const Tokenizer = struct {
 
             // Keywords
             {
-                if (c == 'r') {
-                    if (buffer[self.index..].len > 7) {
-                        const slice = buffer[self.index + 1 .. self.index + 7];
-                        if (std.mem.eql(u8, slice, "eturn ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .Return,
-                                    self.index,
-                                    self.index + 7,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
+                const is_keyword: bool = keyword: {
+                    inline for (Keywords.kvs) |entry| {
+                        const t__ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+                        defer if (comptime build_options.trace) t__.end();
 
-                            self.advance(7);
-                            continue;
+                        const key_len = entry.key.len;
+                        if (buffer[self.index..].len > key_len) {
+                            const potential_keyword = buffer[self.index .. self.index + key_len];
+                            const exists = Keywords.get(potential_keyword);
+
+                            if (exists) |kind| {
+                                try self.tokens.append(
+                                    try Token.new_token(
+                                        kind,
+                                        self.index,
+                                        self.index + key_len,
+                                        self.line,
+                                    ),
+                                );
+
+                                self.advance(key_len);
+                                break :keyword true;
+                            }
                         }
                     }
-                }
+                    break :keyword false;
+                };
 
-                if (c == 'i') {
-                    if (buffer[self.index..].len > 3) {
-                        const slice = buffer[self.index + 1 .. self.index + 3];
-                        if (std.mem.eql(u8, slice, "f ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .If,
-                                    self.index,
-                                    self.index + 3,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(3);
-                            continue;
-                        }
-                    }
-                }
-
-                if (c == 'e') {
-                    if (buffer[self.index..].len > 5) {
-                        const slice = buffer[self.index + 1 .. self.index + 5];
-                        if (std.mem.eql(u8, slice, "lse ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .Else,
-                                    self.index,
-                                    self.index + 5,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(5);
-                            continue;
-                        }
-                    }
-                }
-
-                if (c == 'f') {
-                    if (buffer[self.index..].len > 4) {
-                        const slice = buffer[self.index + 1 .. self.index + 4];
-                        if (std.mem.eql(u8, slice, "or ")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .For,
-                                    self.index,
-                                    self.index + 4,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(4);
-                            continue;
-                        }
-                    }
-                }
-
-                if (c == 'w') {
-                    if (buffer[self.index..].len > 5) {
-                        const slice = buffer[self.index + 1 .. self.index + 5];
-                        if (std.mem.eql(u8, slice, "hile")) {
-                            try self.tokens.append(
-                                try Token.new_token(
-                                    .While,
-                                    self.index,
-                                    self.index + 5,
-                                    self.line,
-                                    self.line.column,
-                                ),
-                            );
-
-                            self.advance(5);
-                            continue;
-                        }
-                    }
-                }
+                if (is_keyword) continue;
             }
 
             // Number
@@ -316,7 +286,6 @@ pub const Tokenizer = struct {
                         start,
                         self.index,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -341,7 +310,6 @@ pub const Tokenizer = struct {
                         start,
                         self.index,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -356,7 +324,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -371,7 +338,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -386,7 +352,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -401,7 +366,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -416,7 +380,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -431,7 +394,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -446,7 +408,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -461,7 +422,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -476,7 +436,20 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
+                    ),
+                );
+
+                self.advance(1);
+                continue;
+            }
+
+            if (c == ',') {
+                try self.tokens.append(
+                    try Token.new_token(
+                        .Comma,
+                        self.index,
+                        self.index + 1,
+                        self.line,
                     ),
                 );
 
@@ -490,7 +463,6 @@ pub const Tokenizer = struct {
                     self.index,
                     self.index + 1,
                     self.line,
-                    self.line.column,
                 ));
 
                 self.advance(1);
@@ -505,7 +477,6 @@ pub const Tokenizer = struct {
                             self.index,
                             self.index + 2,
                             self.line,
-                            self.line.column,
                         ),
                     );
 
@@ -519,7 +490,6 @@ pub const Tokenizer = struct {
                         self.index,
                         self.index + 1,
                         self.line,
-                        self.line.column,
                     ),
                 );
 
@@ -536,7 +506,6 @@ pub const Tokenizer = struct {
                                 self.index,
                                 self.index + 2,
                                 self.line,
-                                self.line.column,
                             ),
                         );
 
@@ -550,7 +519,6 @@ pub const Tokenizer = struct {
                             self.index,
                             self.index + 1,
                             self.line,
-                            self.line.column,
                         ),
                     );
 
@@ -568,7 +536,6 @@ pub const Tokenizer = struct {
                                 self.index,
                                 self.index + 2,
                                 self.line,
-                                self.line.column,
                             ),
                         );
 
@@ -582,7 +549,6 @@ pub const Tokenizer = struct {
                             self.index,
                             self.index + 1,
                             self.line,
-                            self.line.column,
                         ),
                     );
 
@@ -599,7 +565,6 @@ pub const Tokenizer = struct {
                             self.index,
                             self.index + 2,
                             self.line,
-                            self.line.column,
                         ),
                     );
 

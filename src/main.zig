@@ -3,9 +3,8 @@ const builtin = @import("builtin");
 
 const build_options = @import("options");
 
-const tracer = if (build_options.trace) @import("tracer");
-// Won't be accessed if tracer is "void", and can be safely unchecked.
-pub const tracer_impl = tracer.spall;
+const tracer = @import("tracer");
+pub const tracer_impl = if (build_options.trace) tracer.chrome else tracer.none;
 
 const ParserImport = @import("parser.zig");
 const CodeGen = @import("codegen.zig");
@@ -48,30 +47,25 @@ fn usage() void {
     stdout.print(usage_string, .{}) catch @panic("failed to print usage");
 }
 
-inline fn handler() void {
-    if (!build_options.trace) return;
-    const t = tracer.trace(@src());
-    defer t.end();
-}
-
 pub fn main() !u8 {
     defer _ = gpa.deinit();
     defer arena.deinit();
 
-    if (build_options.trace) {
+    if (comptime build_options.trace) {
         std.log.info("Tracing enabled", .{});
         try tracer.init();
         try tracer.init_thread();
     }
 
     defer {
-        if (build_options.trace) {
+        if (comptime build_options.trace) {
             tracer.deinit();
             tracer.deinit_thread();
         }
     }
 
-    handler();
+    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+    defer if (comptime build_options.trace) t.end();
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -89,7 +83,8 @@ pub fn main() !u8 {
 
     var i: usize = 1; // Skip over "scc"
     while (i < args.len) : (i += 1) {
-        handler();
+        const t_ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+        defer if (comptime build_options.trace) t_.end();
 
         const arg = args[i];
 
@@ -137,7 +132,7 @@ pub fn main() !u8 {
             source_buf = try source.readToEndAllocOptions(allocator, source_size, null, 4, 0);
 
             var outputFile = std.mem.splitSequence(u8, file, ".c");
-            var outputFileName = outputFile.next().?;
+            const outputFileName = outputFile.next().?;
             output_file = try std.fmt.allocPrint(allocator, "{s}.s", .{outputFileName});
         }
     }
