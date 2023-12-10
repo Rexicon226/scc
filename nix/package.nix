@@ -26,6 +26,7 @@ in stdenvNoCC.mkDerivation {
     zig build install        \
       ${zigBuildFlags}       \
       -Doptimize=ReleaseSafe \
+      --prefix $out
 
     runHook postBuild
   '';
