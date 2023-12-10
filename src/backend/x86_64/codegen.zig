@@ -3,12 +3,12 @@ const builtin = @import("builtin");
 const build_options = @import("options");
 const tracer = if (build_options.trace) @import("tracer");
 
-const TokenImport = @import("token.zig");
-const ParserImport = @import("parser.zig");
+const TokenImport = @import("../../token.zig");
+const ParserImport = @import("../../parser.zig");
 
-const Writer = @import("util/io.zig").Writer;
+const Writer = @import("../../util/io.zig").Writer;
 
-const AstPrinter = @import("util/ast_printer.zig").Printer;
+const AstPrinter = @import("../../util/ast_printer.zig").Printer;
 
 const Token = TokenImport.Token;
 const Tokenizer = TokenImport.Tokenizer;

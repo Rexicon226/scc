@@ -7,8 +7,10 @@ const tracer = @import("tracer");
 pub const tracer_impl = if (build_options.trace) tracer.chrome else tracer.none;
 
 const ParserImport = @import("parser.zig");
-const CodeGen = @import("codegen.zig");
 const ErrorManager = @import("error.zig").ErrorManager;
+
+// TODO: Create a build option to select between backends.
+const CodeGen = @import("backend/x86_64/codegen.zig");
 
 var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 16 }){};
 

@@ -1,19 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 
 assert() {
   expected="$1"
   input="$2"
 
-  $scc_path --cli "$input" > ./tests/output.s || exit
+  "$scc_path" --cli "$input" > ./output.s || exit
 
   zig cc \
   -Wno-unused-command-line-argument \
-  -target x86_64-linux\
+  -target x86_64-linux \
   -static \
   -z noexecstack \
-  -o ./tests/output ./tests/output.s \
+  -o ./output ./output.s \
 
-  ./tests/output
+  ./output
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
@@ -22,11 +22,10 @@ assert() {
     echo "$input => $expected expected, but got $actual"
 
     # Might want to keep the assembly for debugging
-    rm ./tests/output
+    rm ./output
 
     echo "Assembly:"
-
-    cat ./tests/output.s
+    cat ./output.s
       
     exit 1
   fi
@@ -36,13 +35,13 @@ assert() {
 }
 
 # Check that there was an argument
-if [ $# -ne 2 ]; then
+if [ "$#" -ne 2 ]; then
   echo "Usage: $0 <scc>"
   exit 1
 fi
 
-scc_path=$1
-tests_file=$2
+scc_path="$1"
+tests_file="$2"
 
 # Check that the scc executable exists
 if [ ! -f "$scc_path" ]; then
@@ -67,12 +66,12 @@ fi
 while IFS= read -r line
 do
   # Ignore lines starting with #
-  if [[ ${line:0:1} == '#' ]]; then
+  if [ "$(echo "$line" | cut -c1)" = '#' ]; then
     continue
   fi
 
   # Ignore empty lines
-  if [[ -z "$line" ]]; then
+  if [ -z "$line" ]; then
     continue
   fi
 

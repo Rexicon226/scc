@@ -6,7 +6,7 @@
 }: 
   let 
     fs = lib.fileset;
-    sourceFiles = ../../tests/test.sh;
+    sourceFiles = ../../tests/.;
 
   in stdenvNoCC.mkDerivation {
     name = "scc-behaviour";
@@ -30,7 +30,7 @@
       
       mkdir -p $out
 
-      ./test.sh ${scc}/bin/scc
+      ./test.sh ${scc}/bin/scc ./behaviour.txt
     '';
 
     meta = {
