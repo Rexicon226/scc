@@ -62,8 +62,7 @@ fn resolveNode(sema: *Sema, node: *Parser.Node) anyerror!*Sir.Instruction {
                         const payload: Sir.Instruction.Payload = .{
                             .ty_val = .{
                                 .ty = .usize,
-                                .val = 10,
-                                // TODO: .val = node.value
+                                .val = node.ast.unary.op.value,
                             },
                         };
                         break :blk payload;
