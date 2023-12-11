@@ -22,7 +22,8 @@
     };
   };
 
-  outputs = { nixpkgs, tools, zig, zls, ... }: tools.recursiveUpdateMap (system: let
+  outputs = { self, nixpkgs, tools, zig, zls, ... }: 
+    tools.recursiveUpdateMap (system: let
     # Not legacy just weird naming. See the nixpkgs flake.
     pkgs = nixpkgs.legacyPackages.${system};
   in {
@@ -37,6 +38,13 @@
         zig = zig.packages.${system}.master;
       };
       default = scc;
+    };
+
+    checks.${system} = rec {
+      behaviour = pkgs.callPackage ./nix/checks/behaviour.nix {
+        inherit (self.packages.${system}) scc;
+        zig = zig.packages.${system}.master;
+      };
     };
 
   # Our supported systems are the same supported systems as the Zig binaries.

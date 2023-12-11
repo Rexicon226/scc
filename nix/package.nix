@@ -4,7 +4,9 @@
 
   zig,
 }: let
+
   zigBuildFlags = "--global-cache-dir $(pwd)/.cache --cache-dir $(pwd)/zig-cache -Dcpu=baseline";
+
 in stdenvNoCC.mkDerivation {
   name = "scc";
   version = "master";
@@ -15,7 +17,7 @@ in stdenvNoCC.mkDerivation {
 
   dontConfigure = true;
   dontInstall = true;
-  doCheck = true;
+
 
   buildPhase = ''
     runHook preBuild

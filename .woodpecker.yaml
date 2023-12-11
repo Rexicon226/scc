@@ -10,7 +10,7 @@ steps:
     commands:
       - zig build
 
-  test:
+  behaviour-test:
     image: sinontm/ziglang:latest
     commands:
-      - ./test.sh
+      - ./tests/test.sh zig-out/bin/scc ./tests/behaviour.txt

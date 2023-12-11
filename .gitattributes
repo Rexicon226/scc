@@ -1,0 +1,7 @@
+# Set LF
+* text=auto
+
+# Be more specific
+*.sh text
+*.zig text
+*.nix text
