@@ -16,6 +16,18 @@ pub const Instruction = struct {
         /// `+`
         add,
 
+        /// `-`
+        sub,
+
+        /// `/`
+        div,
+
+        /// `*`
+        mul,
+
+        /// `=`
+        cmp_eq,
+
         /// number literal
         num_lit,
 
@@ -40,7 +52,13 @@ pub const Instruction = struct {
             rhs: *Instruction,
         },
 
-        pub inline fn new(comptime k: Payload, init_tag: anytype) Payload {
+        /// Custom block data
+        block: []*Instruction,
+
+        pub inline fn new(
+            comptime k: std.meta.Tag(Payload),
+            init_tag: anytype,
+        ) Payload {
             return @unionInit(Payload, @tagName(k), init_tag);
         }
     };
