@@ -35,6 +35,9 @@
 
     meta = {
       description = "scc behaviour tests";
-      platforms = [ "x86_64-linux" ];
+      platforms = [ 
+        "x86_64-linux"
+        "x86_64-apple-darwin"
+       ];
     };
   }
