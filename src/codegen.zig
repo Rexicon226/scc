@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const build_options = @import("options");
 const tracer = if (build_options.trace) @import("tracer");
 
@@ -80,9 +81,32 @@ pub fn parse(
     // Pre-calculate the offsets we need
     assign_lvar_offsets(function);
 
-    // Entry point
-    writer.print("\n  .globl main\n");
-    writer.print("main:\n");
+    // Ensure we're compiling on x86_64
+    // NOTE(SeedyROM): The architecture should be a cli option probably,
+    // not the same as the OS it's built on.
+    switch (builtin.cpu.arch) {
+        .x86_64 => {},
+        else => {
+            std.log.err("Unsupported architecture: {}\n", .{builtin.cpu.arch});
+            @panic("Unsupported architecture");
+        },
+    }
+
+    // Entry point depends on OS
+    switch (builtin.os.tag) {
+        .linux => {
+            writer.print("\t.globl main\n");
+            writer.print("main:\n");
+        },
+        .macos => {
+            writer.print("\t.globl _main\n");
+            writer.print("_main:\n");
+        },
+        else => {
+            std.log.err("Unsupported OS: {}\n", .{builtin.os});
+            @panic("Unsupported OS for codegen");
+        },
+    }
 
     // Prologue
     writer.print("  push %rbp\n");
