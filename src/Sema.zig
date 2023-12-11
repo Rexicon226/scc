@@ -13,6 +13,7 @@ const Sema = @This();
 
 allocator: Allocator,
 
+// Should only contain `block` type instructions.
 instructions: std.MultiArrayList(Sir.Instruction),
 
 pub fn init(alloc: Allocator) !Sema {
@@ -37,7 +38,9 @@ pub fn generate(sema: *Sema, body: []*Parser.Node) !void {
 
                 result_inst.* = .{
                     .label = .block,
-                    .payload = Payload.new(.block, block_instructions.items),
+                    .payload = .{
+                        .block = block_instructions.items,
+                    },
                 };
 
                 try sema.instructions.append(sema.allocator, result_inst.*);
@@ -50,18 +53,32 @@ pub fn generate(sema: *Sema, body: []*Parser.Node) !void {
 fn resolveNode(sema: *Sema, node: *Parser.Node) anyerror!*Sir.Instruction {
     switch (node.kind) {
         .RETURN => {
-            const result_inst = try sema.allocator.create(Sir.Instruction);
+            const resolved_result = try sema.allocator.create(Sir.Instruction);
 
-            result_inst.* = switch (node.ast.unary.op.kind) {
+            resolved_result.* = switch (node.ast.unary.op.kind) {
                 .NUM => .{
                     .label = .num_lit,
-                    .payload = Payload.new(.no_op, void{}),
+                    .payload = blk: {
+                        const payload: Sir.Instruction.Payload = .{
+                            .ty_val = .{
+                                .ty = .usize,
+                                .val = 10,
+                                // TODO: .val = node.value
+                            },
+                        };
+                        break :blk payload;
+                    },
                 },
+
                 else => std.debug.panic(
                     "TODO: {} resolveNode RETURN",
                     .{node.ast.unary.op.kind},
                 ),
             };
+
+            const result_inst = try sema.allocator.create(Sir.Instruction);
+
+            result_inst.* = .{ .label = .ret, .payload = .{ .un_op = resolved_result } };
 
             return result_inst;
         },
@@ -71,16 +88,46 @@ fn resolveNode(sema: *Sema, node: *Parser.Node) anyerror!*Sir.Instruction {
     unreachable;
 }
 
+// Debug Printing
+
+const output = std.io.getStdOut();
+const writer = output.writer();
+
 pub fn print(sema: *Sema) noreturn {
     var cursor: u32 = 0;
     while (cursor < sema.instructions.len) : (cursor += 1) {
-        const inst = sema.instructions.toOwnedSlice().get(cursor);
-        _ = inst;
+        const block = sema.instructions.toOwnedSlice().get(cursor);
 
-        // switch (inst.label) {
-        //     .block =>
-        // }
+        sema.printInst(block, 0) catch @panic("failed to print block");
     }
 
     std.os.exit(0);
+}
+
+fn printInst(
+    sema: *Sema,
+    inst: Sir.Instruction,
+    ident: u32,
+) !void {
+    const indent_buffer = try sema.allocator.alloc(u8, ident);
+    @memset(indent_buffer, ' ');
+
+    switch (inst.label) {
+        .block => {
+            const blocks = inst.payload.block;
+
+            for (blocks) |node| {
+                try sema.printInst(node.*, ident + 2);
+            }
+        },
+        .num_lit => {
+            try writer.print("{d}", .{inst.payload.ty_val.val});
+        },
+        .ret => {
+            try writer.print("ret(", .{});
+            try sema.printInst(inst.payload.un_op.*, ident + 2);
+            try writer.print(")\n", .{});
+        },
+        else => std.debug.panic("TODO: {} printInst", .{inst.label}),
+    }
 }

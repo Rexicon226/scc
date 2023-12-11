@@ -55,11 +55,15 @@ pub const Instruction = struct {
         /// Custom block data
         block: []*Instruction,
 
-        pub inline fn new(
-            comptime k: std.meta.Tag(Payload),
-            init_tag: anytype,
-        ) Payload {
-            return @unionInit(Payload, @tagName(k), init_tag);
-        }
+        /// Variables with both a type and a value.
+        ty_val: struct {
+            ty: Type,
+            val: usize,
+        },
+    };
+
+    /// General type delcs for all possible variables
+    pub const Type = enum {
+        usize,
     };
 };
