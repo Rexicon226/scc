@@ -29,9 +29,6 @@ assert() {
       
     exit 1
   fi
-
-  rm ./tests/output.s
-  rm ./tests/output
 }
 
 # Check that there was an argument
@@ -81,3 +78,9 @@ do
 
   assert "$expected" "$input"
 done < "$tests_file"
+
+echo OK
+
+# Clean up
+rm ./output
+rm ./output.s

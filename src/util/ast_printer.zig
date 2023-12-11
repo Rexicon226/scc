@@ -1,9 +1,9 @@
 // A visually pleasing AST printer.
 
 const std = @import("std");
-const Parser = @import("../parser.zig");
 
-const Node = @import("../parser.zig").Node;
+const Parser = @import("../Parser.zig");
+const Node = Parser.Node;
 
 const stdout = std.io.getStdOut().writer();
 

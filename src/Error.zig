@@ -3,11 +3,11 @@
 
 const std = @import("std");
 
-const TokenImport = @import("token.zig");
+const Tokenizer = @import("Token.zig");
 
-const Token = TokenImport.Token;
-const TokenType = TokenImport.Kind;
-const Line = TokenImport.Line;
+const Token = Tokenizer.Token;
+const TokenType = Tokenizer.Kind;
+const Line = Tokenizer.Line;
 
 const Self = @This();
 const assert = std.debug.assert;
