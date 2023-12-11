@@ -22,3 +22,5 @@ Heavily inspired from https://github.com/rui314/chibicc, the parser code is geni
 ## Cool Sources
 
 [A simple, possibly correct LR parser for C11](http://gallium.inria.fr/~fpottier/publis/jourdan-fpottier-2016.pdf)
+
+[Paper about designing IR for optimization](https://arxiv.org/pdf/1912.05036.pdf)

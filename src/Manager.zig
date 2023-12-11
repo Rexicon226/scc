@@ -14,12 +14,13 @@ const Allocator = std.mem.Allocator;
 // Imports
 const Tokenizer = @import("Token.zig");
 const Parser = @import("Parser.zig");
+const Sema = @import("Sema.zig");
 
 // TODO: Automatically switch to the correct backend
 // depending on a cli flag.
 const CodeGen = @import("backend/x86_64/codegen.zig");
 
-// Uil
+// Util
 const AstPrinter = @import("util/ast_printer.zig").Printer;
 
 const Manager = @This();
@@ -167,9 +168,14 @@ pub fn build(manager: *Manager) !void {
     if (manager.arguments.print_ast) {
         var ast_printer = AstPrinter.init(manager.allocator);
         try ast_printer.print(function.body);
+    }
 
-        manager.deinit();
-        std.os.exit(0);
+    if (manager.arguments.use_ir) {
+        // Create a new Sir instance
+        var sema = try Sema.init(manager.allocator);
+        try sema.generate(function.body);
+
+        sema.print();
     }
 
     // Emit the assembly.
@@ -242,7 +248,5 @@ fn usage() void {
 }
 
 fn isEqual(a: []const u8, b: []const u8) bool {
-    if (a.len != b.len) return false;
-
     return std.mem.eql(u8, a, b);
 }
