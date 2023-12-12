@@ -1,6 +1,6 @@
 const std = @import("std");
 const build_options = @import("options");
-const tracer = if (build_options.trace) @import("tracer");
+const tracer = @import("tracer");
 
 const Tokenizer = @This();
 
@@ -21,8 +21,8 @@ pub fn init(
     allocator: std.mem.Allocator,
     progress: *std.Progress.Node,
 ) !Tokenizer {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     return Tokenizer{
         .buffer = source,
@@ -38,16 +38,16 @@ pub fn init(
 }
 
 pub inline fn advance(self: *Tokenizer, amount: usize) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     self.index += amount;
     self.line.column += amount;
 }
 
 pub fn generate(self: *Tokenizer) !void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     const buffer = self.buffer;
 
@@ -71,10 +71,10 @@ pub fn generate(self: *Tokenizer) !void {
     defer char_prog.end();
 
     while (self.index < buffer.len) {
-        const t_ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
+        const t_ = tracer.trace(@src(), "", .{});
 
         defer {
-            if (comptime build_options.trace) t_.end();
+            t_.end();
 
             char_prog.setCompletedItems(self.index);
             char_prog.context.maybeRefresh();
@@ -123,8 +123,8 @@ pub fn generate(self: *Tokenizer) !void {
         {
             const is_keyword: bool = keyword: {
                 inline for (Keywords.kvs) |entry| {
-                    const t__ = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-                    defer if (comptime build_options.trace) t__.end();
+                    const t__ = tracer.trace(@src(), "", .{});
+                    defer t__.end();
 
                     const key_len = entry.key.len;
                     if (buffer[self.index..].len > key_len) {
@@ -556,8 +556,8 @@ pub const Token = struct {
         end: usize,
         line: Line,
     ) !Token {
-        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-        defer if (comptime build_options.trace) t.end();
+        const t = tracer.trace(@src(), "", .{});
+        defer t.end();
 
         return .{
             .kind = kind,
@@ -568,8 +568,8 @@ pub const Token = struct {
     }
 
     pub fn get_ident(self: Token, source: [:0]const u8) []const u8 {
-        const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-        defer if (comptime build_options.trace) t.end();
+        const t = tracer.trace(@src(), "", .{});
+        defer t.end();
 
         if (self.kind != .Variable) {
             @panic("not a variable token");

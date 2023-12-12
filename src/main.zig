@@ -1,12 +1,17 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const build_options = @import("options");
+pub const build_options = @import("options");
 
 const Manager = @import("Manager.zig");
 
 const tracer = @import("tracer");
-pub const tracer_impl = if (build_options.trace) tracer.chrome else tracer.none;
+const tracer_backend = build_options.backend;
+pub const tracer_impl = switch (tracer_backend) {
+    .Chrome => tracer.chrome,
+    .Spall => tracer.spall,
+    .None => tracer.none,
+};
 
 var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 16 }){};
 
@@ -33,21 +38,18 @@ comptime {
 pub fn main() !u8 {
     defer _ = gpa.deinit();
 
-    if (comptime build_options.trace) {
-        std.log.info("Tracing enabled", .{});
-        try tracer.init();
-        try tracer.init_thread();
-    }
+    if (tracer_backend != .None) try std.fs.cwd().makePath("./traces");
+
+    try tracer.init();
+    try tracer.init_thread(try std.fs.cwd().openDir("./traces", .{}));
 
     defer {
-        if (comptime build_options.trace) {
-            tracer.deinit();
-            tracer.deinit_thread();
-        }
+        tracer.deinit();
+        tracer.deinit_thread();
     }
 
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     // Create a new build manager.
     var manager = try Manager.init(allocator);

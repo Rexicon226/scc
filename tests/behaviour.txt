@@ -1,4 +1,5 @@
 # Behaviour tests
+
 0 - { return 0; }
 42 - { return 42; }
 21 - { return 5+20-4; }

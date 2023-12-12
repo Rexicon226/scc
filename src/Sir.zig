@@ -8,31 +8,29 @@ const Sir = @This();
 pub const Instruction = struct {
     label: Label,
     payload: Payload,
+    index: u32,
 
     pub const Label = enum {
         /// `return`
         ret,
-
-        /// `+`
-        add,
-
-        /// `-`
-        sub,
-
-        /// `/`
-        div,
-
-        /// `*`
-        mul,
-
-        /// `=`
-        cmp_eq,
 
         /// number literal
         num_lit,
 
         /// A block of instructions.
         block,
+
+        /// Allocates its payload and referring this instruction later
+        /// is the same as referencing the pointer of the payload.
+        alloc,
+
+        /// Loads a payload into a pointer.
+        ///
+        /// `load(index, type, value)
+        load,
+
+        /// A statement
+        statement,
     };
 
     pub const Payload = union(enum) {
@@ -52,18 +50,43 @@ pub const Instruction = struct {
             rhs: *Instruction,
         },
 
+        // TODO: I don't know if I like having a triple_op
+        // maybe limit it to 2 children max.
+        load_op: struct {
+            lhs: *Instruction,
+            ty: Type,
+            rhs: *Instruction,
+        },
+
         /// Custom block data
-        block: []*Instruction,
+        block: []Instruction,
 
         /// Variables with both a type and a value.
         ty_val: struct {
             ty: Type,
             val: usize,
         },
+
+        /// Just a simple usize payload.
+        val: usize,
+
+        ty: Type,
     };
 
-    /// General type delcs for all possible variables
+    /// Primatives
     pub const Type = enum {
-        usize,
+        usize_val,
+
+        pub fn format(
+            self: Type,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            std.debug.assert(fmt.len == 0);
+            _ = options;
+
+            try writer.print("{s}", .{@tagName(self)});
+        }
     };
 };

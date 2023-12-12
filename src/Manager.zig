@@ -143,7 +143,6 @@ pub fn build(manager: *Manager) !void {
     defer main_progress_node.end();
 
     // Parse the source.
-
     var tokenizer = try Tokenizer.init(
         source,
         manager.allocator,
@@ -171,11 +170,24 @@ pub fn build(manager: *Manager) !void {
     }
 
     if (manager.arguments.use_ir) {
-        // Create a new Sir instance
-        var sema = try Sema.init(manager.allocator);
+
+        // Sema uses a temporary child Arena
+        var sema_arena = std.heap.ArenaAllocator.init(manager.allocator);
+
+        // Create a new Sema instance
+        var sema = try Sema.init(sema_arena.allocator());
         try sema.generate(function.body);
 
+        const bytes_used = sema_arena.state.end_index;
+
         sema.print();
+        std.debug.print("Arena Size: {} bytes\n", .{bytes_used});
+
+        // Free the sema arena.
+        sema_arena.deinit();
+
+        // Nothing is really compatible yet with the new backend...
+        std.os.exit(0);
     }
 
     // Emit the assembly.

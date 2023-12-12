@@ -2,6 +2,7 @@ const std = @import("std");
 
 var trace: ?bool = false;
 var @"enable-bench": ?bool = false;
+var backend: TraceBackend = .None;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -25,8 +26,14 @@ pub fn build(b: *std.Build) !void {
     );
 
     trace = b.option(bool, "trace",
-        \\Enables tracing of the compiler using the default backend (spall)
+        \\Enables tracing of the compiler using the default backend
     );
+
+    if (trace) |_| {
+        backend = b.option(TraceBackend, "trace-backend",
+            \\Switch between what backend to use. None is default.
+        ) orelse backend;
+    }
 
     // Options
     const exe_options = b.addOptions();
@@ -40,6 +47,8 @@ pub fn build(b: *std.Build) !void {
 
     // Trace
     exe_options.addOption(bool, "trace", trace orelse false);
+    exe_options.addOption(TraceBackend, "backend", backend);
+
     exe_options.addOption(usize, "src_file_trimlen", std.fs.path.dirname(std.fs.path.dirname(@src().file).?).?.len);
 
     exe.addOptions("options", exe_options);
@@ -66,17 +75,21 @@ pub fn build(b: *std.Build) !void {
     if (enable_tests) |_| try addTests(b);
 }
 
+const TraceBackend = enum {
+    Spall,
+    Chrome,
+    None,
+};
+
 fn addDeps(
     b: *std.Build,
     exe: *std.build.Step.Compile,
 ) !void {
-    if (trace) |_| {
-        const tracer_dep = b.dependency("tracer", .{
-            .target = exe.target,
-        });
-        exe.addModule("tracer", tracer_dep.module("tracer"));
-        exe.linkLibC(); // Needs libc.
-    }
+    const tracer_dep = b.dependency("tracer", .{
+        .target = exe.target,
+    });
+    exe.addModule("tracer", tracer_dep.module("tracer"));
+    exe.linkLibC(); // Needs libc.
 }
 
 fn addTests(b: *std.Build) !void {

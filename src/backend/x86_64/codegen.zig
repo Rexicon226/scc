@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("options");
-const tracer = if (build_options.trace) @import("tracer");
+const tracer = @import("tracer");
 
 const Tokenizer = @import("../../Token.zig");
 const Parser = @import("../../Parser.zig");
@@ -39,8 +39,8 @@ pub fn generate(
     self: *CodeGen,
     function: *Function,
 ) !void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     // Pre-calculate the offsets we need
     assign_lvar_offsets(function);
@@ -109,8 +109,8 @@ var depth: usize = 0;
 
 /// Pushes the value of rax onto the stack
 fn push(self: *CodeGen) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     self.writer.print("  push %rax\n");
     depth += 1;
@@ -118,16 +118,16 @@ fn push(self: *CodeGen) void {
 
 /// Pops the value of `reg` from the stack
 fn pop(self: *CodeGen, reg: []const u8) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     self.writer.printArg("  pop {s}\n", .{reg});
     depth -= 1;
 }
 
 fn gen_addr(self: *CodeGen, node: *Node) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     switch (node.kind) {
         .VAR => {
@@ -151,8 +151,8 @@ fn gen_addr(self: *CodeGen, node: *Node) void {
 ///
 /// e.g. `align_to(5, 4) == 8`
 fn align_to(n: usize, al: usize) usize {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     return (n + al - 1) / al * al;
 }
@@ -160,8 +160,8 @@ fn align_to(n: usize, al: usize) usize {
 /// Pre-calculates and assigns the offset of each
 /// local variable in `prog`
 fn assign_lvar_offsets(prog: *Function) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     var offset: isize = 0;
 
@@ -176,8 +176,8 @@ fn assign_lvar_offsets(prog: *Function) void {
 var counter: usize = 0;
 
 fn expression(self: *CodeGen, node: *Node) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     switch (node.kind) {
         .NUM => {
@@ -267,8 +267,8 @@ fn expression(self: *CodeGen, node: *Node) void {
 }
 
 fn statement(self: *CodeGen, node: *Node) void {
-    const t = if (comptime build_options.trace) tracer.trace(@src(), "", .{});
-    defer if (comptime build_options.trace) t.end();
+    const t = tracer.trace(@src(), "", .{});
+    defer t.end();
 
     switch (node.kind) {
         .IF => {

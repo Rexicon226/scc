@@ -4,8 +4,8 @@
     .paths = .{""},
     .dependencies = .{
         .tracer = .{
-            .url = "https://github.com/nektro/zig-tracer/archive/e5b21467c891fe9a2956358a38b496a5d9a174fc.tar.gz",
-            .hash = "12200d45b8662a6f8ab8f2c30623cee77a5e7bc95867a1f1c15d64e9bddd4e25bab9",
+            .url = "https://github.com/nektro/zig-tracer/archive/13249b93d1e7aec4b31d1fae18cc249d8b8293db.tar.gz",
+            .hash = "12205f6a063cfc9c79fb336da2a72076dc70c612677ee53d018caa37747cc0004831",
         },
     },
 }
