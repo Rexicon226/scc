@@ -38,14 +38,18 @@ comptime {
 pub fn main() !u8 {
     defer _ = gpa.deinit();
 
-    if (tracer_backend != .None) try std.fs.cwd().makePath("./traces");
+    if (tracer_backend != .None) {
+        try std.fs.cwd().makePath("./traces");
 
-    try tracer.init();
-    try tracer.init_thread(try std.fs.cwd().openDir("./traces", .{}));
+        try tracer.init();
+        try tracer.init_thread(try std.fs.cwd().openDir("./traces", .{}));
+    }
 
     defer {
-        tracer.deinit();
-        tracer.deinit_thread();
+        if (tracer_backend != .None) {
+            tracer.deinit();
+            tracer.deinit_thread();
+        }
     }
 
     const t = tracer.trace(@src(), "", .{});
