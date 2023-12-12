@@ -14,6 +14,9 @@ pub const Instruction = struct {
         /// `return`
         ret,
 
+        // Math
+        add,
+
         /// number literal
         num_lit,
 
@@ -87,7 +90,7 @@ pub const Instruction = struct {
 
     /// Primatives
     pub const Type = enum(u8) {
-        usize_val,
+        u64_ty,
 
         pub fn format(
             self: Type,
@@ -98,7 +101,16 @@ pub const Instruction = struct {
             std.debug.assert(fmt.len == 0);
             _ = options;
 
-            try writer.print("{s}", .{@tagName(self)});
+            switch (self) {
+                .u64_ty => try writer.print("u64", .{}),
+            }
+        }
+
+        /// Returns the byte footprint of the Type
+        pub fn sizeOf(self: Type) u32 {
+            return switch (self) {
+                .u64_ty => 4,
+            };
         }
     };
 };

@@ -23,11 +23,15 @@ string_table: std.StringHashMapUnmanaged(u32),
 
 index: u32 = 0,
 
+// STUPID HACK I HATE THIS
+current_instructions: std.ArrayListUnmanaged(Sir.Instruction),
+
 pub fn init(alloc: Allocator) !Sema {
     return .{
         .allocator = alloc,
         .instructions = std.MultiArrayList(Sir.Instruction){},
         .string_table = std.StringHashMapUnmanaged(u32){},
+        .current_instructions = std.ArrayListUnmanaged(Sir.Instruction){},
     };
 }
 
@@ -38,11 +42,9 @@ pub fn generate(sema: *Sema, body: []*Parser.Node) !void {
     for (body) |node| {
         switch (node.kind) {
             .BLOCK => {
-                var block_instructions = std.ArrayListUnmanaged(Sir.Instruction){};
-
                 for (node.body) |sub_node| {
                     const resolved_inst = try sema.resolveSet(sub_node);
-                    try block_instructions.appendSlice(sema.allocator, resolved_inst);
+                    try sema.current_instructions.appendSlice(sema.allocator, resolved_inst);
                 }
 
                 try sema.instructions.append(
@@ -50,7 +52,7 @@ pub fn generate(sema: *Sema, body: []*Parser.Node) !void {
                     .{
                         .label = .block,
                         .payload = .{
-                            .block = block_instructions.items,
+                            .block = sema.current_instructions.items,
                         },
                         .index = 0,
                     },
@@ -91,42 +93,40 @@ fn resolveSet(sema: *Sema, node: *Parser.Node) ![]Sir.Instruction {
             // Allocate the space for the assignment.
             const return_inst = try sema.allocator.alloc(Sir.Instruction, 2);
 
-            return_inst[0] = .{
-                .index = sema.index,
-                .label = .alloc,
-                .payload = .{
-                    .val = 4,
-                },
-            };
-
-            sema.index += 1;
-
             const load_lhs_inst = try sema.allocator.create(Sir.Instruction);
-            const load_rhs_inst = try sema.allocator.create(Sir.Instruction);
-
-            load_lhs_inst.* = .{ .index = 0, .label = .instruction, .payload = .{
-                .val = return_inst[0].index,
-            } };
-
-            load_rhs_inst.* = .{
-                .index = 0,
-                .label = .num_lit,
-                .payload = .{
-                    .val = node.ast.binary.rhs.value,
-                },
-            };
 
             return_inst[1] = .{
                 .index = 0,
                 .label = .load,
                 .payload = .{
                     .load_op = .{
-                        .lhs = load_lhs_inst,
-                        .ty = .usize_val,
-                        .rhs = load_rhs_inst,
+                        .lhs = undefined,
+                        .ty = .u64_ty,
+                        .rhs = try sema.resolveNode(node.ast.binary.rhs),
                     },
                 },
             };
+
+            return_inst[0] = .{
+                .index = sema.index,
+                .label = .alloc,
+                .payload = .{
+                    .val = Sir.Instruction.Type.u64_ty.sizeOf(),
+                },
+            };
+
+            load_lhs_inst.* = .{
+                .index = 0,
+                .label = .instruction,
+                .payload = .{
+                    .val = return_inst[0].index,
+                },
+            };
+
+            // TODO: :grief: wtf is this!!
+            return_inst[1].payload.load_op.lhs = load_lhs_inst;
+
+            sema.index += 1;
 
             // Add this to the string lookup table.
             const gop = try sema.string_table.getOrPut(sema.allocator, node.ast.binary.lhs.variable.name);
@@ -156,7 +156,7 @@ fn resolveNode(sema: *Sema, node: *Parser.Node) !*Sir.Instruction {
                 .payload = blk: {
                     const payload: Sir.Instruction.Payload = .{
                         .ty_val = .{
-                            .ty = .usize_val,
+                            .ty = .u64_ty,
                             .val = node.value,
                         },
                     };
@@ -183,6 +183,42 @@ fn resolveNode(sema: *Sema, node: *Parser.Node) !*Sir.Instruction {
 
                 return result_inst;
             } else @panic("variable not found");
+        },
+
+        // Math
+
+        .ADD => {
+            const result_inst = try sema.allocator.create(Sir.Instruction);
+
+            result_inst.* = .{
+                .label = .add,
+                .index = sema.index,
+                .payload = .{
+                    .bin_op = .{
+                        .lhs = try sema.resolveNode(node.ast.binary.lhs),
+                        .rhs = try sema.resolveNode(node.ast.binary.rhs),
+                    },
+                },
+            };
+
+            sema.index += 1;
+
+            // Add to the instruction stack
+            try sema.current_instructions.append(sema.allocator, result_inst.*);
+
+            // Return the reference to that instruction.
+
+            const instruction = try sema.allocator.create(Sir.Instruction);
+
+            instruction.* = .{
+                .label = .instruction,
+                .index = 0,
+                .payload = .{
+                    .val = result_inst.index,
+                },
+            };
+
+            return instruction;
         },
         else => std.debug.panic("TODO: {} resolveNode", .{node}),
     }
@@ -234,13 +270,22 @@ fn printInst(
             const payload = inst.payload.load_op;
             try writer.print("load(", .{});
             try sema.printInst(payload.lhs, ident);
-            try writer.print(", {}, {})\n", .{
-                payload.ty,
-                payload.rhs.payload.val,
-            });
+            try writer.print(", {}, ", .{payload.ty});
+            try sema.printInst(payload.rhs, ident);
+            try writer.print(")\n", .{});
         },
         .instruction => {
             try writer.print("${}", .{inst.payload.val});
+        },
+
+        // Math
+        .add => {
+            try writer.print("${} = ", .{inst.index});
+            try writer.print("add(", .{});
+            try sema.printInst(inst.payload.bin_op.lhs, ident);
+            try writer.print(", ", .{});
+            try sema.printInst(inst.payload.bin_op.rhs, ident);
+            try writer.print(")\n", .{});
         },
         else => try writer.print("TODO: {} printInst\n", .{inst.label}),
     }
