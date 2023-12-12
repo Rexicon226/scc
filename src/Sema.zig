@@ -18,10 +18,16 @@ allocator: Allocator,
 // Should only contain `block` type instructions.
 instructions: std.MultiArrayList(Sir.Instruction),
 
+// String lookup table. Contains all *already* declared variables.
+string_table: std.StringHashMapUnmanaged(u32),
+
+index: u32 = 0,
+
 pub fn init(alloc: Allocator) !Sema {
     return .{
         .allocator = alloc,
         .instructions = std.MultiArrayList(Sir.Instruction){},
+        .string_table = std.StringHashMapUnmanaged(u32){},
     };
 }
 
@@ -68,8 +74,10 @@ fn resolveSet(sema: *Sema, node: *Parser.Node) ![]Sir.Instruction {
             result_inst[0] = .{
                 .label = .ret,
                 .payload = .{ .un_op = resolved_result },
-                .index = 0,
+                .index = sema.index,
             };
+
+            sema.index += 1;
 
             return result_inst;
         },
@@ -84,14 +92,21 @@ fn resolveSet(sema: *Sema, node: *Parser.Node) ![]Sir.Instruction {
             const return_inst = try sema.allocator.alloc(Sir.Instruction, 2);
 
             return_inst[0] = .{
-                .index = 0,
+                .index = sema.index,
                 .label = .alloc,
                 .payload = .{
                     .val = 4,
                 },
             };
 
+            sema.index += 1;
+
+            const load_lhs_inst = try sema.allocator.create(Sir.Instruction);
             const load_rhs_inst = try sema.allocator.create(Sir.Instruction);
+
+            load_lhs_inst.* = .{ .index = 0, .label = .instruction, .payload = .{
+                .val = return_inst[0].index,
+            } };
 
             load_rhs_inst.* = .{
                 .index = 0,
@@ -101,17 +116,25 @@ fn resolveSet(sema: *Sema, node: *Parser.Node) ![]Sir.Instruction {
                 },
             };
 
-            return_inst[1] = Sir.Instruction{
+            return_inst[1] = .{
                 .index = 0,
                 .label = .load,
                 .payload = .{
                     .load_op = .{
-                        .lhs = &return_inst[0],
+                        .lhs = load_lhs_inst,
                         .ty = .usize_val,
                         .rhs = load_rhs_inst,
                     },
                 },
             };
+
+            // Add this to the string lookup table.
+            const gop = try sema.string_table.getOrPut(sema.allocator, node.ast.binary.lhs.variable.name);
+            if (gop.found_existing) {
+                @panic("allocated same variable name twice");
+            } else {
+                gop.value_ptr.* = return_inst[0].index;
+            }
 
             return return_inst;
         },
@@ -143,6 +166,23 @@ fn resolveNode(sema: *Sema, node: *Parser.Node) !*Sir.Instruction {
             };
 
             return result_inst;
+        },
+        .VAR => {
+            // Get the variable index.
+            const gop = sema.string_table.get(node.variable.name);
+            if (gop) |index| {
+                const result_inst = try sema.allocator.create(Sir.Instruction);
+
+                result_inst.* = .{
+                    .label = .instruction,
+                    .index = 0,
+                    .payload = .{
+                        .val = index,
+                    },
+                };
+
+                return result_inst;
+            } else @panic("variable not found");
         },
         else => std.debug.panic("TODO: {} resolveNode", .{node}),
     }
@@ -183,7 +223,7 @@ fn printInst(
         .ret => {
             try writer.print("${} = ", .{inst.index});
             try writer.print("ret(", .{});
-            try sema.printInst(inst.payload.un_op, ident + 2);
+            try sema.printInst(inst.payload.un_op, ident);
             try writer.print(")\n", .{});
         },
         .alloc => {
@@ -192,11 +232,15 @@ fn printInst(
         },
         .load => {
             const payload = inst.payload.load_op;
-            try writer.print("load(${}, {}, {})\n", .{
-                payload.lhs.index,
+            try writer.print("load(", .{});
+            try sema.printInst(payload.lhs, ident);
+            try writer.print(", {}, {})\n", .{
                 payload.ty,
                 payload.rhs.payload.val,
             });
+        },
+        .instruction => {
+            try writer.print("${}", .{inst.payload.val});
         },
         else => try writer.print("TODO: {} printInst\n", .{inst.label}),
     }

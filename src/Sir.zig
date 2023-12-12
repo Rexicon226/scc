@@ -31,6 +31,18 @@ pub const Instruction = struct {
 
         /// A statement
         statement,
+
+        /// A reference to another instruction
+        ///
+        /// ```
+        /// $0 = alloc(4)
+        /// ret($0)
+        /// ```
+        ///
+        /// the `$0` inside of the `ret` is a label of `instruction`
+        ///
+        /// the point is to not mix up `num_lit` and instruction indices
+        instruction,
     };
 
     pub const Payload = union(enum) {
@@ -74,7 +86,7 @@ pub const Instruction = struct {
     };
 
     /// Primatives
-    pub const Type = enum {
+    pub const Type = enum(u8) {
         usize_val,
 
         pub fn format(
